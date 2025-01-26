@@ -266,6 +266,7 @@ class RetirementIncomePlan(Base):
     start_age: Mapped[int] = mapped_column(Integer, nullable=False)
     end_age: Mapped[Optional[int]] = mapped_column(Integer)
     include_in_nest_egg: Mapped[bool] = mapped_column(Integer, default=1)
+    apply_inflation: Mapped[bool] = mapped_column(Integer, default=0)
 
     # Relationships
     plan = relationship("Plan", back_populates="retirement_income_plans")

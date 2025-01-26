@@ -24,6 +24,7 @@ class RetirementIncomePlanCreate:
     start_age: int
     end_age: Optional[int] = None
     include_in_nest_egg: bool = True
+    apply_inflation: bool = True
 
 @dataclass
 class RetirementIncomePlanUpdate:
@@ -34,6 +35,7 @@ class RetirementIncomePlanUpdate:
     start_age: Optional[int] = None
     end_age: Optional[int] = None
     include_in_nest_egg: Optional[bool] = None
+    apply_inflation: Optional[bool] = None
 
 def create_retirement_plan(db: Session, plan_data: RetirementIncomePlanCreate) -> Optional[RetirementIncomePlan]:
     """Creates a new retirement income plan."""
@@ -43,9 +45,10 @@ def create_retirement_plan(db: Session, plan_data: RetirementIncomePlanCreate) -
         if not plan:
             return None
             
-        # Convert bool to int for SQLite
+        # Convert bools to int for SQLite
         data_dict = vars(plan_data)
         data_dict['include_in_nest_egg'] = 1 if data_dict['include_in_nest_egg'] else 0
+        data_dict['apply_inflation'] = 1 if data_dict['apply_inflation'] else 0
         
         retirement_plan = RetirementIncomePlan(**data_dict)
         db.add(retirement_plan)
@@ -93,9 +96,11 @@ def update_retirement_plan(
             
         update_data = {k: v for k, v in vars(plan_data).items() if v is not None}
         
-        # Convert bool to int for SQLite if present
+        # Convert bools to int for SQLite if present
         if 'include_in_nest_egg' in update_data:
             update_data['include_in_nest_egg'] = 1 if update_data['include_in_nest_egg'] else 0
+        if 'apply_inflation' in update_data:
+            update_data['apply_inflation'] = 1 if update_data['apply_inflation'] else 0
             
         for key, value in update_data.items():
             setattr(retirement_plan, key, value)
