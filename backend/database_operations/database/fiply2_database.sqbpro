@@ -1,236 +1,84 @@
-<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="fiply2_database.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="browser pragmas query structure" current="0"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="6705"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="sqlite_sequence" custom_title="0" dock_id="1" table="4,15:mainsqlite_sequence"/><dock_state state="000000ff00000000fd0000000100000002000009f4000004eefc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000009f40000011800ffffff000002700000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="sqlite_sequence" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="39"/><column index="2" value="29"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">-- This schema follows standard formatting best practices:
--- - Dates are stored in ISO 8601 format (YYYY-MM-DD).
--- - Boolean values are represented as INTEGER (0 for FALSE, 1 for TRUE).
--- - Text fields are used for names, descriptions, and identifiers.
--- - Foreign key relationships use ON DELETE CASCADE to maintain referential integrity.
--- - Monetary values and amounts are stored as REAL with a precision of two decimal places.
--- - Percentages (e.g., growth rates) are stored as REAL and expressed as decimals (e.g., 0.05 for 5%).
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="fiply2_database.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="browser pragmas query structure" current="0"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="4598"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="inflows_outflows" custom_title="0" dock_id="1" table="4,16:maininflows_outflows"/><dock_state state="000000ff00000000fd0000000100000002000009f4000004eefc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000009f40000011e00ffffff000002700000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="asset_categories" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="110"/><column index="2" value="52"/><column index="3" value="94"/><column index="4" value="94"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="assets" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="55"/><column index="2" value="52"/><column index="3" value="112"/><column index="4" value="75"/><column index="5" value="43"/><column index="6" value="38"/><column index="7" value="124"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="base_assumptions" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="52"/><column index="2" value="109"/><column index="3" value="109"/><column index="4" value="74"/><column index="5" value="74"/><column index="6" value="111"/><column index="7" value="124"/><column index="8" value="84"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="growth_rate_configurations" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="95"/><column index="2" value="57"/><column index="3" value="165"/><column index="4" value="74"/><column index="5" value="114"/><column index="6" value="66"/><column index="7" value="61"/><column index="8" value="78"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="households" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="83"/><column index="2" value="103"/><column index="3" value="120"/><column index="4" value="118"/><column index="5" value="85"/><column index="6" value="120"/><column index="7" value="118"/><column index="8" value="81"/><column index="9" value="210"/><column index="10" value="210"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="inflows_outflows" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="110"/><column index="2" value="52"/><column index="3" value="33"/><column index="4" value="39"/><column index="5" value="96"/><column index="6" value="66"/><column index="7" value="61"/><column index="8" value="92"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="liabilities" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="67"/><column index="2" value="52"/><column index="3" value="124"/><column index="4" value="87"/><column index="5" value="43"/><column index="6" value="38"/><column index="7" value="81"/><column index="8" value="124"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="liability_categories" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="122"/><column index="2" value="52"/><column index="3" value="109"/><column index="4" value="94"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="plans" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="50"/><column index="2" value="85"/><column index="3" value="70"/><column index="4" value="68"/><column index="5" value="216"/><column index="6" value="316"/><column index="7" value="58"/><column index="8" value="95"/><column index="9" value="118"/><column index="10" value="88"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="retirement_income_plans" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="97"/><column index="2" value="52"/><column index="3" value="39"/><column index="4" value="43"/><column index="5" value="93"/><column index="6" value="62"/><column index="7" value="56"/><column index="8" value="124"/><column index="9" value="92"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenario_assumptions" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="74"/><column index="2" value="109"/><column index="3" value="109"/><column index="4" value="124"/><column index="5" value="84"/><column index="6" value="169"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenario_overrides" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="72"/><column index="2" value="74"/><column index="3" value="57"/><column index="4" value="69"/><column index="5" value="112"/><column index="6" value="165"/><column index="7" value="86"/><column index="8" value="91"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenarios" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="72"/><column index="2" value="52"/><column index="3" value="93"/><column index="4" value="89"/><column index="5" value="68"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">INSERT INTO households (household_name, person1_first_name, person1_last_name, person1_dob, person2_first_name, person2_last_name, person2_dob, created_at, updated_at)
+VALUES ('Test Household E', 'David', 'Wilson', '1975-04-30', 'Maria', 'Wilson', '1978-09-12', DATETIME('now'), DATETIME('now'));
 
--- HOUSEHOLDS TABLE
--- Stores basic client information, serving as the primary organizational unit.
-CREATE TABLE households (
-    household_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each household
-    household_name TEXT NOT NULL,                    -- Name of the household
-    person1_first_name TEXT NOT NULL,                -- First name of Person 1
-    person1_last_name TEXT NOT NULL,                 -- Last name of Person 1
-    person1_dob DATE NOT NULL,                       -- Date of birth for Person 1
-    person2_first_name TEXT,                         -- First name of Person 2 (optional)
-    person2_last_name TEXT,                          -- Last name of Person 2 (optional)
-    person2_dob DATE,                                -- Date of birth for Person 2 (optional)
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the household was created
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    -- Timestamp of the last update
-);
+INSERT INTO plans (household_id, plan_name, created_at, updated_at, description, is_active, target_fire_age, target_fire_amount, risk_tolerance)
+VALUES ((SELECT MAX(household_id) FROM households), 'International Retirement Plan', DATETIME('now'), DATETIME('now'), 'Multi-currency retirement strategy with overseas assets', 1, 58, 4000000, 'Aggressive');
 
--- PLANS TABLE
--- Represents financial plans associated with a household.
-CREATE TABLE plans (
-    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,       -- Unique identifier for each plan
-    household_id INTEGER NOT NULL,                   -- Reference to the household this plan belongs to
-    plan_name TEXT NOT NULL,                         -- Name of the plan
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the plan was created
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of the last update
-    FOREIGN KEY (household_id) REFERENCES households (household_id) ON DELETE CASCADE
-);
+INSERT INTO base_assumptions (plan_id, retirement_age_1, retirement_age_2, final_age_1, final_age_2, final_age_selector, default_growth_rate, inflation_rate)
+VALUES ((SELECT MAX(plan_id) FROM plans), 58, 60, 95, 95, 1, 0.065, 0.031);
 
--- BASE ASSUMPTIONS TABLE
--- Stores global assumptions for each plan, such as retirement ages and growth rates.
-CREATE TABLE base_assumptions (
-    plan_id INTEGER PRIMARY KEY,                     -- One-to-one relationship with the plan
-    retirement_age_1 INTEGER,                        -- Retirement age for Person 1
-    retirement_age_2 INTEGER,                        -- Retirement age for Person 2
-    final_age_1 INTEGER,                             -- Planning horizon (final age) for Person 1
-    final_age_2 INTEGER,                             -- Planning horizon (final age) for Person 2
-    final_age_selector INTEGER,                      -- Which person's final age is used (1 or 2)
-    default_growth_rate REAL,                        -- Default growth rate applied to assets/liabilities
-    inflation_rate REAL,                             -- Assumed inflation rate
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO asset_categories (plan_id, category_name, category_order)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'International Real Estate', 1),
+((SELECT MAX(plan_id) FROM plans), 'Global Equities', 2),
+((SELECT MAX(plan_id) FROM plans), 'Cryptocurrency', 3),
+((SELECT MAX(plan_id) FROM plans), 'Startup Investments', 4);
 
--- SCENARIOS TABLE
--- Represents what-if scenarios associated with a plan.
-CREATE TABLE scenarios (
-    scenario_id INTEGER PRIMARY KEY AUTOINCREMENT,   -- Unique identifier for each scenario
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this scenario belongs to
-    scenario_name TEXT NOT NULL,                     -- Name of the scenario
-    scenario_color TEXT,                             -- Optional color for visualization in charts
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the scenario was created
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO liability_categories (plan_id, category_name, category_order)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'International Mortgages', 1),
+((SELECT MAX(plan_id) FROM plans), 'Business Loans', 2),
+((SELECT MAX(plan_id) FROM plans), 'Personal Credit', 3);
 
--- SCENARIO ASSUMPTIONS TABLE
--- Stores high-level scenario-specific assumptions that override base assumptions.
-CREATE TABLE scenario_assumptions (
-    scenario_id INTEGER PRIMARY KEY,                 -- One-to-one relationship with the scenario
-    retirement_age_1 INTEGER,                        -- Scenario-specific retirement age for Person 1
-    retirement_age_2 INTEGER,                        -- Scenario-specific retirement age for Person 2
-    default_growth_rate REAL,                        -- Scenario-specific default growth rate
-    inflation_rate REAL,                             -- Scenario-specific inflation rate
-    annual_retirement_spending REAL,                 -- Annual retirement spending specific to the scenario
-    FOREIGN KEY (scenario_id) REFERENCES scenarios (scenario_id) ON DELETE CASCADE
-);
+INSERT INTO assets (plan_id, asset_category_id, asset_name, owner, value, include_in_nest_egg)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-3 FROM asset_categories), 'London Property', 'Joint', 900000, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-2 FROM asset_categories), 'Global ETF Portfolio', 'Person 1', 750000, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-1 FROM asset_categories), 'Bitcoin Holdings', 'Person 2', 100000, 0),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id) FROM asset_categories), 'Tech Startup Shares', 'Person 1', 250000, 0);
 
--- SCENARIO OVERRIDES TABLE
--- Stores granular overrides for financial components within scenarios.
-CREATE TABLE scenario_overrides (
-    override_id INTEGER PRIMARY KEY AUTOINCREMENT,   -- Unique identifier for each override
-    scenario_id INTEGER NOT NULL,                    -- Reference to the scenario this override belongs to
-    asset_id INTEGER,                                -- Reference to an asset (if overriding an asset)
-    liability_id INTEGER,                            -- Reference to a liability (if overriding a liability)
-    inflow_outflow_id INTEGER,                       -- Reference to an inflow/outflow (if overriding one)
-    retirement_income_plan_id INTEGER,               -- Reference to a retirement income plan (if overriding one)
-    override_field TEXT NOT NULL,                    -- Field being overridden (e.g., 'value', 'growth_rate')
-    override_value TEXT NOT NULL,                    -- New value for the field
-    
-    FOREIGN KEY (scenario_id) 
-        REFERENCES scenarios (scenario_id) ON DELETE CASCADE,
-    FOREIGN KEY (asset_id) 
-        REFERENCES assets (asset_id) ON DELETE CASCADE,
-    FOREIGN KEY (liability_id) 
-        REFERENCES liabilities (liability_id) ON DELETE CASCADE,
-    FOREIGN KEY (inflow_outflow_id) 
-        REFERENCES inflows_outflows (inflow_outflow_id) ON DELETE CASCADE,
-    FOREIGN KEY (retirement_income_plan_id)
-        REFERENCES retirement_income_plans (income_plan_id) ON DELETE CASCADE
-);
+INSERT INTO liabilities (plan_id, liability_category_id, liability_name, owner, value, interest_rate, include_in_nest_egg)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id)-2 FROM liability_categories), 'London Mortgage', 'Joint', 600000, 0.0325, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id)-1 FROM liability_categories), 'Startup Loan', 'Person 1', 150000, 0.0675, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id) FROM liability_categories), 'Credit Lines', 'Person 2', 25000, 0.089, 0);
 
--- ASSET CATEGORIES TABLE
--- Stores customizable categories for organizing assets.
-CREATE TABLE asset_categories (
-    asset_category_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each category
-    plan_id INTEGER NOT NULL,                            -- Reference to the plan this category belongs to
-    category_name TEXT NOT NULL,                         -- Name of the category
-    category_order INTEGER DEFAULT 0,                    -- Optional order for displaying categories
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO inflows_outflows (plan_id, type, name, annual_amount, start_date, end_date, apply_inflation)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Tech Executive Salary', 225000, '2024-01-01', '2028-12-31', 1),
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Rental Income London', 45000, '2024-01-01', NULL, 1),
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Consulting Revenue', 80000, '2024-01-01', '2030-12-31', 1),
+((SELECT MAX(plan_id) FROM plans), 'OUTFLOW', 'International Property Management', 12000, '2024-01-01', NULL, 1);
 
--- ASSETS TABLE
--- Represents assets associated with a plan, with optional categories and growth rates.
-CREATE TABLE assets (
-    asset_id INTEGER PRIMARY KEY AUTOINCREMENT,      -- Unique identifier for each asset
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this asset belongs to
-    asset_category_id INTEGER NOT NULL,              -- Reference to the category this asset belongs to
-    asset_name TEXT NOT NULL,                        -- Name of the asset
-    owner TEXT NOT NULL,                             -- Ownership type
-    value REAL NOT NULL,                             -- Current value of the asset
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the asset is included in retirement projections
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
-    FOREIGN KEY (asset_category_id) REFERENCES asset_categories (asset_category_id) ON DELETE CASCADE
-);
+INSERT INTO retirement_income_plans (plan_id, name, owner, annual_income, start_age, end_age, include_in_nest_egg, apply_inflation)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'UK Pension', 'Person 1', 40000, 58, NULL, 1, 1),
+((SELECT MAX(plan_id) FROM plans), 'EU Pension', 'Person 2', 35000, 60, NULL, 1, 1),
+((SELECT MAX(plan_id) FROM plans), 'Deferred Comp Plan', 'Person 1', 75000, 58, 68, 1, 0);
 
--- LIABILITY CATEGORIES TABLE
--- Stores customizable categories for organizing liabilities.
-CREATE TABLE liability_categories (
-    liability_category_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each category
-    plan_id INTEGER NOT NULL,                                -- Reference to the plan this category belongs to
-    category_name TEXT NOT NULL,                             -- Name of the category
-    category_order INTEGER DEFAULT 0,                        -- Optional order for displaying categories
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO scenarios (plan_id, scenario_name, scenario_color, created_at)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'Crypto Boom', '#FFD700', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Startup Exit', '#9370DB', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Conservative Pivot', '#20B2AA', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Early Exit', '#FF6347', DATETIME('now'));
 
--- LIABILITIES TABLE
--- Represents liabilities associated with a plan, with optional categories and interest rates.
-CREATE TABLE liabilities (
-    liability_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each liability
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this liability belongs to
-    liability_category_id INTEGER NOT NULL,          -- Reference to the category this liability belongs to
-    liability_name TEXT NOT NULL,                    -- Name of the liability
-    owner TEXT NOT NULL,                             -- Ownership type
-    value REAL NOT NULL,                             -- Current value of the liability
-    interest_rate REAL,                              -- Optional interest rate for the liability
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the liability is included in retirement projections
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
-    FOREIGN KEY (liability_category_id) REFERENCES liability_categories (liability_category_id) ON DELETE CASCADE
-);
+INSERT INTO growth_rate_configurations (asset_id, configuration_type, start_date, end_date, growth_rate)
+VALUES 
+((SELECT MAX(asset_id)-3 FROM assets), 'STEPWISE', '2024-01-01', '2025-12-31', 0.04),
+((SELECT MAX(asset_id)-3 FROM assets), 'STEPWISE', '2026-01-01', '2028-12-31', 0.06),
+((SELECT MAX(asset_id)-2 FROM assets), 'OVERRIDE', NULL, NULL, 0.085),
+((SELECT MAX(asset_id)-1 FROM assets), 'STEPWISE', '2024-01-01', '2024-12-31', 0.50),
+((SELECT MAX(asset_id)-1 FROM assets), 'STEPWISE', '2025-01-01', '2026-12-31', 0.20),
+((SELECT MAX(asset_id) FROM assets), 'STEPWISE', '2024-01-01', '2026-12-31', 0.15);
 
--- INFLOWS AND OUTFLOWS TABLE
--- Represents recurring cash flows (income or expenses) associated with a plan.
-CREATE TABLE inflows_outflows (
-    inflow_outflow_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each inflow or outflow
-    plan_id INTEGER NOT NULL,                            -- Reference to the plan this cash flow belongs to
-    type TEXT NOT NULL,                                  -- Whether it is an inflow or outflow
-    name TEXT NOT NULL,                                  -- Name of the inflow or outflow
-    annual_amount REAL NOT NULL,                         -- Annual amount of the cash flow
-    start_date DATE NOT NULL,                            -- Start date of the cash flow
-    end_date DATE,                                       -- End date of the cash flow
-    apply_inflation INTEGER DEFAULT 0,                   -- Whether inflation is applied to the cash flow
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO scenario_assumptions (scenario_id, retirement_age_1, retirement_age_2, default_growth_rate, inflation_rate, annual_retirement_spending)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), 55, 57, 0.072, 0.035, 150000),
+((SELECT MAX(scenario_id)-2 FROM scenarios), 53, 55, 0.068, 0.033, 180000),
+((SELECT MAX(scenario_id)-1 FROM scenarios), 62, 64, 0.045, 0.028, 120000),
+((SELECT MAX(scenario_id) FROM scenarios), 50, 52, 0.075, 0.034, 200000);
 
--- RETIREMENT INCOME PLANS TABLE
--- Represents retirement income sources such as Social Security or pensions.
-CREATE TABLE retirement_income_plans (
-    income_plan_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each income plan
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this income plan belongs to
-    name TEXT NOT NULL,                              -- Name of the income source
-    owner TEXT NOT NULL,                             -- Ownership type
-    annual_income REAL NOT NULL,                     -- Annual income amount
-    start_age INTEGER NOT NULL,                      -- Age when income starts
-    end_age INTEGER,                                 -- Age when income ends (optional)
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the income is included in retirement projections
-    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
-);
+INSERT INTO scenario_overrides (scenario_id, asset_id, override_field, override_value)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), (SELECT MAX(asset_id)-1 FROM assets), 'value', '500000'),
+((SELECT MAX(scenario_id)-2 FROM scenarios), (SELECT MAX(asset_id) FROM assets), 'value', '2000000'),
+((SELECT MAX(scenario_id)-1 FROM scenarios), (SELECT MAX(asset_id)-1 FROM assets), 'remove', 'TRUE'),
+((SELECT MAX(scenario_id) FROM scenarios), (SELECT MAX(asset_id) FROM assets), 'value', '3000000');
 
--- GROWTH RATE CONFIGURATIONS TABLE
--- Centralized table for managing default, custom, and stepwise growth rates.
-CREATE TABLE growth_rate_configurations (
-    growth_rate_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each growth rate configuration
-    asset_id INTEGER,                                 -- Reference to an asset (if configuring asset growth)
-    retirement_income_plan_id INTEGER,                -- Reference to a retirement income plan (if configuring income growth)
-    scenario_id INTEGER,                              -- Reference to the scenario (if scenario-specific)
-    configuration_type TEXT NOT NULL,                 -- 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
-    start_date DATE,                                  -- Start date for stepwise growth rates
-    end_date DATE,                                    -- End date for stepwise growth rates
-    growth_rate REAL NOT NULL,                        -- Growth rate value
-
-    FOREIGN KEY (asset_id)
-        REFERENCES assets (asset_id) ON DELETE CASCADE,
-    FOREIGN KEY (retirement_income_plan_id)
-        REFERENCES retirement_income_plans (income_plan_id) ON DELETE CASCADE,
-    FOREIGN KEY (scenario_id)
-        REFERENCES scenarios (scenario_id) ON DELETE CASCADE
-);
-
--- INDEXES
-
--- Indexes for HOUSEHOLDS
-CREATE INDEX idx_households_name ON households (household_name);
-
--- Indexes for PLANS
-CREATE INDEX idx_plans_household_id ON plans (household_id);
-
--- Indexes for SCENARIOS
-CREATE INDEX idx_scenarios_plan_id ON scenarios (plan_id);
-
--- Indexes for SCENARIO OVERRIDES
-CREATE INDEX idx_scenario_overrides_scenario_id ON scenario_overrides (scenario_id);
-CREATE INDEX idx_scenario_overrides_asset_id ON scenario_overrides (asset_id);
-CREATE INDEX idx_scenario_overrides_liability_id ON scenario_overrides (liability_id);
-CREATE INDEX idx_scenario_overrides_inflow_outflow_id ON scenario_overrides (inflow_outflow_id);
-CREATE INDEX idx_scenario_overrides_rip_id ON scenario_overrides (retirement_income_plan_id);
-
--- Indexes for ASSET CATEGORIES
-CREATE INDEX idx_asset_categories_plan_id ON asset_categories (plan_id);
-
--- Indexes for ASSETS
-CREATE INDEX idx_assets_plan_id ON assets (plan_id);
-CREATE INDEX idx_assets_category_id ON assets (asset_category_id);
-
--- Indexes for LIABILITY CATEGORIES
-CREATE INDEX idx_liability_categories_plan_id ON liability_categories (plan_id);
-
--- Indexes for LIABILITIES
-CREATE INDEX idx_liabilities_plan_id ON liabilities (plan_id);
-CREATE INDEX idx_liabilities_category_id ON liabilities (liability_category_id);
-
--- Indexes for INFLOWS AND OUTFLOWS
-CREATE INDEX idx_inflows_outflows_plan_id ON inflows_outflows (plan_id);
-CREATE INDEX idx_inflows_outflows_type ON inflows_outflows (type);
-
--- Indexes for RETIREMENT INCOME PLANS
-CREATE INDEX idx_retirement_income_plans_plan_id ON retirement_income_plans (plan_id);
-
--- Indexes for GROWTH RATE CONFIGURATIONS
-CREATE INDEX idx_growth_rate_configurations_asset_id ON growth_rate_configurations (asset_id);
-CREATE INDEX idx_growth_rate_configurations_rip_id ON growth_rate_configurations (retirement_income_plan_id);
-CREATE INDEX idx_growth_rate_configurations_scenario_id ON growth_rate_configurations (scenario_id);
-CREATE INDEX idx_growth_rate_configurations_dates ON growth_rate_configurations (start_date, end_date);</sql><current_tab id="0"/></tab_sql></sqlb_project>
+INSERT INTO scenario_overrides (scenario_id, retirement_income_plan_id, override_field, override_value)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), (SELECT MAX(income_plan_id)-2 FROM retirement_income_plans), 'annual_income', '50000'),
+((SELECT MAX(scenario_id)-2 FROM scenarios), (SELECT MAX(income_plan_id)-1 FROM retirement_income_plans), 'start_age', '55'),
+((SELECT MAX(scenario_id)-1 FROM scenarios), (SELECT MAX(income_plan_id) FROM retirement_income_plans), 'end_age', '75'),
+((SELECT MAX(scenario_id) FROM scenarios), (SELECT MAX(income_plan_id) FROM retirement_income_plans), 'annual_income', '100000');</sql><current_tab id="0"/></tab_sql></sqlb_project>
