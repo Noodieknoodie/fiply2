@@ -1,38 +1,50 @@
-"""Retirement income calculation module for base facts."""
+"""Retirement income calculation module for base facts.
+
+This module handles retirement income calculations using a year-based approach.
+Following the principle of "store what you know, calculate what you need":
+- Income sources are stored with start_age and optional end_age
+- All calculations occur at the start of each year
+- Inflation is applied before other adjustments
+"""
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Dict, List, Optional, TypedDict, Literal
 from enum import Enum
 
-from ...utils.date_utils import is_between_ages, calculate_age_at_date
-from ...utils.money_utils import to_decimal, to_float
-from . import OwnerType  # Add import for OwnerType
+from ...utils.date_utils import calculate_age_for_year
+from ...utils.money_utils import to_decimal, to_float, apply_annual_inflation
+from . import OwnerType
 
 @dataclass
 class RetirementIncomeFact:
-    """Represents a retirement income source with its core attributes."""
+    """Represents a retirement income source with its core attributes.
+    
+    All monetary values are stored as float but converted to Decimal for calculations.
+    Ages are stored as integers, representing the age at which income starts/ends.
+    Birth dates are stored as ISO format strings (YYYY-MM-DD) but converted to date objects for calculations.
+    """
     annual_income: float
-    owner: OwnerType  # Updated to use OwnerType enum
+    owner: OwnerType
     include_in_nest_egg: bool
     name: str
     start_age: int
     end_age: Optional[int]
     apply_inflation: bool
-    person_dob: date
+    person_dob: str  # ISO format date string 'YYYY-MM-DD'
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'RetirementIncomeFact':
         """Create a RetirementIncomeFact from a database row dictionary."""
         return cls(
             annual_income=float(row['annual_income']),
-            owner=OwnerType(row['owner']),  # Convert string to enum
+            owner=OwnerType(row['owner']),
             include_in_nest_egg=bool(row['include_in_nest_egg']),
             name=row['name'],
             start_age=int(row['start_age']),
             end_age=int(row['end_age']) if row.get('end_age') is not None else None,
             apply_inflation=bool(row['apply_inflation']),
-            person_dob=row['person_dob']
+            person_dob=row['person_dob'].isoformat() if hasattr(row['person_dob'], 'isoformat') else row['person_dob']
         )
 
 class RetirementIncomeValueResult(TypedDict):
@@ -47,39 +59,50 @@ class RetirementIncomeValueResult(TypedDict):
 
 def calculate_retirement_income_value(
     income: RetirementIncomeFact,
-    calculation_date: date,
-    person_dob: date,
+    calculation_year: int,
     inflation_rate: float = 0.0,
-    base_date: date = date.today()
+    base_year: int = None
 ) -> RetirementIncomeValueResult:
-    """
-    Calculate the value of a retirement income at a specific date.
+    """Calculate the value of a retirement income for a specific year.
     
-    A retirement income is considered active if:
-    - The person's age at calculation_date is >= start_age
-    - AND either there is no end_age OR the person's age at calculation_date is <= end_age
+    Following the SINGLE SOURCE OF TRUTH:
+    1. Events apply at the start of the year
+    2. Inflation applies at the start of the year
+    3. Priority: (1) Inflows (2) Inflation (3) Spending (4) Growth
     
     Args:
         income: The retirement income to calculate
-        calculation_date: The date to calculate the value for
-        person_dob: Date of birth for the income owner
-        inflation_rate: Annual inflation rate to apply if income is inflation-adjusted
-        base_date: The starting date for calculations
+        calculation_year: The year to calculate the value for
+        inflation_rate: Annual inflation rate for inflation-adjusted incomes
+        base_year: Starting year for inflation calculations
         
     Returns:
         Dictionary containing the income details and calculated values
     """
     # Convert values to Decimal for precise calculations
-    annual_amount = Decimal(str(income.annual_income))
+    annual_amount = to_decimal(income.annual_income)
     
-    # Check if income is active at calculation date based on age
-    is_active = is_between_ages(person_dob, calculation_date, income.start_age, income.end_age)
+    # Convert string DOB to date object for age calculation
+    year, month, day = map(int, income.person_dob.split('-'))
+    dob = date(year, month, day)
+    
+    # Calculate age in the calculation year
+    current_age = calculate_age_for_year(dob, calculation_year)
+    
+    # Check if income is active based on age
+    is_active = (
+        current_age >= income.start_age and
+        (income.end_age is None or current_age <= income.end_age)
+    )
+    
+    # Calculate the year this income starts (when person reaches start_age)
+    start_year = year + income.start_age
     
     if not is_active:
         return {
             'name': income.name,
-            'owner': str(income.owner),
-            'annual_amount': float(annual_amount.quantize(Decimal('0.01'))),
+            'owner': income.owner.value,
+            'annual_amount': to_float(annual_amount),
             'adjusted_amount': 0.0,
             'is_active': False,
             'inflation_applied': False,
@@ -90,17 +113,23 @@ def calculate_retirement_income_value(
     adjusted_amount = annual_amount
     inflation_applied = False
     
-    if income.apply_inflation and inflation_rate > 0:
-        years = Decimal(str((calculation_date - base_date).days)) / Decimal('365')
-        inflation_factor = (Decimal('1') + Decimal(str(inflation_rate))) ** years
-        adjusted_amount *= inflation_factor
-        inflation_applied = True
+    if income.apply_inflation and inflation_rate > 0 and base_year is not None:
+        # Only apply inflation if:
+        # 1. We're past the base year
+        # 2. This isn't the first year the income starts
+        if calculation_year > base_year and calculation_year > start_year:
+            # Apply inflation at the start of each year after base_year
+            inflation_rate_decimal = to_decimal(str(inflation_rate))
+            years_of_inflation = calculation_year - base_year
+            for _ in range(years_of_inflation):
+                adjusted_amount = apply_annual_inflation(adjusted_amount, inflation_rate_decimal)
+            inflation_applied = True
     
     return {
         'name': income.name,
-        'owner': str(income.owner),
-        'annual_amount': float(annual_amount.quantize(Decimal('0.01'))),
-        'adjusted_amount': float(adjusted_amount.quantize(Decimal('0.01'))),
+        'owner': income.owner.value,
+        'annual_amount': to_float(annual_amount),
+        'adjusted_amount': to_float(adjusted_amount),
         'is_active': True,
         'inflation_applied': inflation_applied,
         'included_in_totals': income.include_in_nest_egg
@@ -108,88 +137,69 @@ def calculate_retirement_income_value(
 
 def aggregate_retirement_income_by_owner(
     incomes: List[RetirementIncomeFact],
-    calculation_date: date,
-    person1_dob: date,
-    person2_dob: Optional[date] = None,
+    calculation_year: int,
     inflation_rate: float = 0.0,
-    base_date: date = date.today()
+    base_year: int = None
 ) -> Dict[str, List[RetirementIncomeValueResult]]:
-    """
-    Group and calculate retirement incomes by owner.
+    """Group and calculate retirement incomes by owner for a specific year.
     
     Args:
         incomes: List of retirement incomes to aggregate
-        calculation_date: Date to calculate values for
-        person1_dob: Date of birth for person 1
-        person2_dob: Date of birth for person 2 (optional)
+        calculation_year: Year to calculate values for
         inflation_rate: Annual inflation rate for inflation-adjusted incomes
-        base_date: Starting date for calculations
+        base_year: Starting year for inflation calculations
         
     Returns:
-        Dictionary mapping owners to lists of calculated values
+        Dictionary mapping owner types to lists of calculated values
     """
-    results: Dict[str, List[RetirementIncomeValueResult]] = {}
+    results: Dict[str, List[RetirementIncomeValueResult]] = {
+        owner.value: [] for owner in OwnerType
+    }
     
     for income in incomes:
-        # Determine which person's DOB to use
-        dob = person1_dob if income.owner == 'person1' else person2_dob
-        if dob is None:
-            continue  # Skip if no DOB available for owner
-            
         value = calculate_retirement_income_value(
             income,
-            calculation_date,
-            dob,
+            calculation_year,
             inflation_rate,
-            base_date
+            base_year
         )
-        
-        if income.owner not in results:
-            results[income.owner] = []
-        results[income.owner].append(value)
+        results[income.owner.value].append(value)
     
     return results
 
 class TotalRetirementIncomeResult(TypedDict):
     """Type definition for total retirement income calculation results."""
     total_income: float
-    nest_egg_income: float  # Added to match pattern in assets/liabilities
+    nest_egg_income: float
     metadata: Dict[str, Dict[Literal['total', 'active'], int]]
 
 def calculate_total_retirement_income(
     incomes: List[RetirementIncomeFact],
-    calculation_date: date,
-    person1_dob: date,
-    person2_dob: Optional[date] = None,
+    calculation_year: int,
     inflation_rate: float = 0.0,
-    base_date: date = date.today()
+    base_year: int = None
 ) -> TotalRetirementIncomeResult:
-    """
-    Calculate total retirement income values.
+    """Calculate total retirement income values for a specific year.
     
     Args:
         incomes: List of retirement incomes to total
-        calculation_date: Date to calculate values for
-        person1_dob: Date of birth for person 1
-        person2_dob: Date of birth for person 2 (optional)
+        calculation_year: Year to calculate values for
         inflation_rate: Annual inflation rate for inflation-adjusted incomes
-        base_date: Starting date for calculations
+        base_year: Starting year for inflation calculations
         
     Returns:
         Dictionary containing total income, nest egg income, and metadata
     """
     aggregated = aggregate_retirement_income_by_owner(
         incomes,
-        calculation_date,
-        person1_dob,
-        person2_dob,
+        calculation_year,
         inflation_rate,
-        base_date
+        base_year
     )
     
     # Initialize totals as Decimal
-    total_income = Decimal('0')
-    nest_egg_income = Decimal('0')
+    total_income = to_decimal('0')
+    nest_egg_income = to_decimal('0')
     total_count = 0
     active_count = 0
     
@@ -199,7 +209,7 @@ def calculate_total_retirement_income(
         active_count += sum(1 for income in owner_incomes if income['is_active'])
         
         for income in owner_incomes:
-            amount = Decimal(str(income['adjusted_amount']))
+            amount = to_decimal(str(income['adjusted_amount']))
             total_income += amount
             
             # Only add to nest egg total if included and active
@@ -207,8 +217,8 @@ def calculate_total_retirement_income(
                 nest_egg_income += amount
     
     return {
-        'total_income': float(total_income.quantize(Decimal('0.01'))),
-        'nest_egg_income': float(nest_egg_income.quantize(Decimal('0.01'))),
+        'total_income': to_float(total_income),
+        'nest_egg_income': to_float(nest_egg_income),
         'metadata': {
             'incomes': {
                 'total': total_count,

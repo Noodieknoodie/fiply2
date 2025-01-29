@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 from sqlalchemy.schema import CreateTable
 from sqlalchemy import create_engine
-from models import Base
+from database_operations.models import Base
+
 
 # Get the path to the actual database file
 DB_PATH = Path(__file__).parent / "database" / "fiply2_database.db"

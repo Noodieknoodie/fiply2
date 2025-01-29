@@ -1,85 +1,142 @@
--- This schema follows standard formatting best practices:
--- - Dates are stored in ISO 8601 format (YYYY-MM-DD).
--- - Boolean values are represented as INTEGER (0 for FALSE, 1 for TRUE).
--- - Text fields are used for names, descriptions, and identifiers.
--- - Foreign key relationships use ON DELETE CASCADE to maintain referential integrity.
--- - Monetary values and amounts are stored as REAL with a precision of two decimal places.
--- - Percentages (e.g., growth rates) are stored as REAL and expressed as decimals (e.g., 0.05 for 5%).
+# **FIPLI: Overview for AI Development Assistance**  
+
+FIPLI is a financial projection tool designed for financial advisors to model long-term financial scenarios for client households. A **household** contains multiple **plans**, and each plan contains multiple **scenarios**, allowing advisors to create “what-if” projections by modifying base assumptions without altering core plan data. The system operates **linearly** without Monte Carlo simulations and focuses purely on **forward-looking asset trajectory modeling**.  
+
+FIPLI differs from conventional financial planning software by **eliminating unnecessary complexity** while maintaining projection accuracy. Instead of tracking income, expenses, and withdrawals in detail, FIPLI models all financial events as adjustments to a single **nest egg trajectory**—which includes all assets and liabilities combined. **Retirement spending is a single planned outflow**, modifying the nest egg directly rather than tracking how expenses are covered by specific income or assets.  
+
+### **Key Principles & Differentiators**  
+1. **Time is measured in ages and years, not specific dates.** The system operates on age increments rather than calendar dates, eliminating complexity from leap years, exact timing, or monthly breakdowns.  
+2. **All financial events apply at the start of the year.** This includes inflows (income, inheritances, asset sales), planned spending (retirement withdrawals), and investment growth. There is no intra-year cash flow tracking.  
+3. **Inflation applies at the start of the year before modifying values.** This ensures consistency when adjusting inflows, outflows, and asset growth projections.  
+4. **Growth is applied annually before retirement spending.** Asset appreciation is factored in before deducting planned spending, ensuring a consistent year-over-year accumulation model.  
+5. **Debt balances accrue interest annually, but debt payments are not tracked.** Net worth growth naturally accounts for liability management without explicit debt servicing logic.  
+6. **Lump sum inflows (inheritance, asset sales) apply at the start of the year and immediately adjust the nest egg.** These are not treated as separate income streams but as instant asset increases.  
+7. **No logic for "covering expenses" from income or withdrawals.** Unlike traditional tools, FIPLI does not match expenses against specific income sources. Instead, retirement spending reduces the nest egg directly, maintaining a clear projection trajectory.  
+
+### **What FIPLI Is Not**  
+- **It is not a cash flow tracking tool.** It does not map income vs. expenses on a granular level but instead provides a **high-level projection** of asset growth and depletion over time.  
+- **It does not allocate withdrawals from specific accounts.** There is no prioritization logic for taxable vs. tax-deferred vs. Roth accounts—withdrawals simply reflect reductions in the nest egg.  
+- **It does not calculate specific tax liabilities.** While tax assumptions may be factored into growth rates, no explicit tax breakdowns are generated.  
+- **It does not rely on Monte Carlo simulations.** All projections follow **fixed growth and inflation assumptions** for deterministic forecasting.  
+
+### **Why This Matters for AI Developers**  
+FIPLI prioritizes **consistency and predictability** over excessive realism. AI developers should **not** assume traditional financial planning logic, such as detailed cash flow modeling, tax calculations, or account-specific withdrawal strategies. Instead, all financial events are handled as **single-year adjustments to the nest egg trajectory** to ensure **simpler, more scalable projections** while preserving scenario flexibility.  
+
+When implementing logic, follow the **single source of truth** to maintain structured, predictable modifications. The focus is **not on micro-level accuracy** but on delivering **clear, high-level asset growth and depletion projections over time**.  
+
+---
+
+# **SINGLE SOURCE OF TRUTH**  
+
+1. **Events apply at the start of the year** unless explicitly marked otherwise.  
+2. **Ages increment at the beginning of the year.**  
+3. **Growth is applied at the start of the year.**  
+4. **Inflation applies at the start of the year before modifying projected values.**  
+5. **Income and inflows (salary, pensions, rental income, etc.) are added at the start of the year.**  
+6. **Projected retirement spending is a single planned outflow entry that adjusts the nest egg trajectory.**  
+7. **Retirement spending is deducted at the start of the year before applying growth.**  
+8. **There is no logic for “covering” expenses—spending simply lowers the nest egg according to the projection.**  
+9. **Debt interest accrues annually at the start of the year.** No explicit payments are tracked; net worth growth accounts for liability management.  
+10. **Lump sum inflows (inheritances, asset sales) are applied at the start of the year and factored into the nest egg immediately.**  
+11. **The priority order for financial events within a year is:**  
+    - **(1) Apply inflows (income, inheritances, lump sums)**  
+    - **(2) Apply inflation adjustments**  
+    - **(3) Deduct retirement spending**  
+    - **(4) Apply investment growth**  
+
+This structure ensures that **all assets, liabilities, and financial events contribute to a single, unified projection** without unnecessary complexity.
+
+
+
+########
+SCHEMA
+########
+
+-- SCHEMA OVERVIEW AND CONVENTIONS
+-- This schema uses natural "source of truth" metrics for all time-based fields:
+-- - Exact dates (DATE) for known dates like birthdates
+-- - Ages (INTEGER) for age-based events like retirement
+-- - Years (INTEGER) for future events and market projections
+-- Other conventions:
+-- - Boolean values stored as INTEGER (0 for FALSE, 1 for TRUE)
+-- - Monetary values stored as REAL with 2 decimal precision
+-- - Growth rates and percentages stored as REAL decimal (0.05 for 5%)
+-- - All tables include appropriate foreign keys with ON DELETE CASCADE
 
 -- HOUSEHOLDS TABLE
--- Stores basic client information, serving as the primary organizational unit.
+-- Primary organizational unit storing client information
 CREATE TABLE households (
-    household_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each household
-    household_name TEXT NOT NULL,                    -- Name of the household
-    person1_first_name TEXT NOT NULL,                -- First name of Person 1
-    person1_last_name TEXT NOT NULL,                 -- Last name of Person 1
-    person1_dob DATE NOT NULL,                       -- Date of birth for Person 1
-    person2_first_name TEXT,                         -- First name of Person 2 (optional)
-    person2_last_name TEXT,                          -- Last name of Person 2 (optional)
-    person2_dob DATE,                                -- Date of birth for Person 2 (optional)
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the household was created
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    -- Timestamp of the last update
+    household_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_name TEXT NOT NULL,
+    person1_first_name TEXT NOT NULL,
+    person1_last_name TEXT NOT NULL,
+    person1_dob DATE NOT NULL,                      -- Full date for precise calculations
+    person2_first_name TEXT,
+    person2_last_name TEXT,
+    person2_dob DATE,                               -- Full date for precise calculations
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- PLANS TABLE
--- Represents financial plans associated with a household.
+-- Financial plans associated with a household
 CREATE TABLE plans (
-    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,       -- Unique identifier for each plan
-    household_id INTEGER NOT NULL,                   -- Reference to the household this plan belongs to
-    plan_name TEXT NOT NULL,                         -- Name of the plan
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the plan was created
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of the last update
+    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL,
+    plan_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (household_id) REFERENCES households (household_id) ON DELETE CASCADE
 );
 
 -- BASE ASSUMPTIONS TABLE
--- Stores global assumptions for each plan, such as retirement ages and growth rates.
+-- Global assumptions for each plan
 CREATE TABLE base_assumptions (
-    plan_id INTEGER PRIMARY KEY,                     -- One-to-one relationship with the plan
-    retirement_age_1 INTEGER,                        -- Retirement age for Person 1
-    retirement_age_2 INTEGER,                        -- Retirement age for Person 2
-    final_age_1 INTEGER,                             -- Planning horizon (final age) for Person 1
-    final_age_2 INTEGER,                             -- Planning horizon (final age) for Person 2
-    final_age_selector INTEGER,                      -- Which person's final age is used (1 or 2)
-    default_growth_rate REAL,                        -- Default growth rate applied to assets/liabilities
-    inflation_rate REAL,                             -- Assumed inflation rate
+    plan_id INTEGER PRIMARY KEY,
+    retirement_age_1 INTEGER,                       -- Age-based: "Retire at 65"
+    retirement_age_2 INTEGER,                       -- Age-based: "Retire at 65"
+    final_age_1 INTEGER,                           -- Age-based: "Plan until 95"
+    final_age_2 INTEGER,                           -- Age-based: "Plan until 95"
+    final_age_selector INTEGER,                     -- Which person's final age to use (1 or 2)
+    default_growth_rate REAL,                      -- Annual growth rate (e.g., 0.05 for 5%)
+    inflation_rate REAL,                           -- Annual inflation rate (e.g., 0.03 for 3%)
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- SCENARIOS TABLE
--- Represents what-if scenarios associated with a plan.
+-- What-if scenarios for different planning approaches
 CREATE TABLE scenarios (
-    scenario_id INTEGER PRIMARY KEY AUTOINCREMENT,   -- Unique identifier for each scenario
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this scenario belongs to
-    scenario_name TEXT NOT NULL,                     -- Name of the scenario
-    scenario_color TEXT,                             -- Optional color for visualization in charts
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,   -- Timestamp of when the scenario was created
+    scenario_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    scenario_name TEXT NOT NULL,
+    scenario_color TEXT,                            -- For UI visualization
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- SCENARIO ASSUMPTIONS TABLE
--- Stores high-level scenario-specific assumptions that override base assumptions.
+-- Scenario-specific overrides of base assumptions
 CREATE TABLE scenario_assumptions (
-    scenario_id INTEGER PRIMARY KEY,                 -- One-to-one relationship with the scenario
-    retirement_age_1 INTEGER,                        -- Scenario-specific retirement age for Person 1
-    retirement_age_2 INTEGER,                        -- Scenario-specific retirement age for Person 2
-    default_growth_rate REAL,                        -- Scenario-specific default growth rate
-    inflation_rate REAL,                             -- Scenario-specific inflation rate
-    annual_retirement_spending REAL,                 -- Annual retirement spending specific to the scenario
+    scenario_id INTEGER PRIMARY KEY,
+    retirement_age_1 INTEGER,                       -- Age-based: Retirement planning is age-focused
+    retirement_age_2 INTEGER,                       -- Age-based: Retirement planning is age-focused
+    default_growth_rate REAL,                      -- Annual rate
+    inflation_rate REAL,                           -- Annual rate
+    annual_retirement_spending REAL,                -- Amount
     FOREIGN KEY (scenario_id) REFERENCES scenarios (scenario_id) ON DELETE CASCADE
 );
 
 -- SCENARIO OVERRIDES TABLE
--- Stores granular overrides for financial components within scenarios.
+-- Granular overrides for specific components within scenarios
 CREATE TABLE scenario_overrides (
-    override_id INTEGER PRIMARY KEY AUTOINCREMENT,   -- Unique identifier for each override
-    scenario_id INTEGER NOT NULL,                    -- Reference to the scenario this override belongs to
-    asset_id INTEGER,                                -- Reference to an asset (if overriding an asset)
-    liability_id INTEGER,                            -- Reference to a liability (if overriding a liability)
-    inflow_outflow_id INTEGER,                       -- Reference to an inflow/outflow (if overriding one)
-    retirement_income_plan_id INTEGER,               -- Reference to a retirement income plan (if overriding one)
-    override_field TEXT NOT NULL,                    -- Field being overridden (e.g., 'value', 'growth_rate')
-    override_value TEXT NOT NULL,                    -- New value for the field
+    override_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario_id INTEGER NOT NULL,
+    asset_id INTEGER,                               -- Optional: if overriding an asset
+    liability_id INTEGER,                           -- Optional: if overriding a liability
+    inflow_outflow_id INTEGER,                      -- Optional: if overriding a cash flow
+    retirement_income_plan_id INTEGER,              -- Optional: if overriding retirement income
+    override_field TEXT NOT NULL,                   -- Field being overridden
+    override_value TEXT NOT NULL,                   -- New value (matches source table's format)
     
     FOREIGN KEY (scenario_id) 
         REFERENCES scenarios (scenario_id) ON DELETE CASCADE,
@@ -94,94 +151,95 @@ CREATE TABLE scenario_overrides (
 );
 
 -- ASSET CATEGORIES TABLE
--- Stores customizable categories for organizing assets.
+-- Organizational categories for assets
 CREATE TABLE asset_categories (
-    asset_category_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each category
-    plan_id INTEGER NOT NULL,                            -- Reference to the plan this category belongs to
-    category_name TEXT NOT NULL,                         -- Name of the category
-    category_order INTEGER DEFAULT 0,                    -- Optional order for displaying categories
+    asset_category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    category_name TEXT NOT NULL,
+    category_order INTEGER DEFAULT 0,               -- For UI ordering
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- ASSETS TABLE
--- Represents assets associated with a plan, with optional categories and growth rates.
+-- All assets associated with a plan
 CREATE TABLE assets (
-    asset_id INTEGER PRIMARY KEY AUTOINCREMENT,      -- Unique identifier for each asset
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this asset belongs to
-    asset_category_id INTEGER NOT NULL,              -- Reference to the category this asset belongs to
-    asset_name TEXT NOT NULL,                        -- Name of the asset
-    owner TEXT NOT NULL,                             -- Ownership type
-    value REAL NOT NULL,                             -- Current value of the asset
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the asset is included in retirement projections
+    asset_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    asset_category_id INTEGER NOT NULL,
+    asset_name TEXT NOT NULL,
+    owner TEXT NOT NULL,                           -- 'person1', 'person2', or 'joint'
+    value REAL NOT NULL,                          -- Current value
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
     FOREIGN KEY (asset_category_id) REFERENCES asset_categories (asset_category_id) ON DELETE CASCADE
 );
 
 -- LIABILITY CATEGORIES TABLE
--- Stores customizable categories for organizing liabilities.
+-- Organizational categories for liabilities
 CREATE TABLE liability_categories (
-    liability_category_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each category
-    plan_id INTEGER NOT NULL,                                -- Reference to the plan this category belongs to
-    category_name TEXT NOT NULL,                             -- Name of the category
-    category_order INTEGER DEFAULT 0,                        -- Optional order for displaying categories
+    liability_category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    category_name TEXT NOT NULL,
+    category_order INTEGER DEFAULT 0,               -- For UI ordering
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- LIABILITIES TABLE
--- Represents liabilities associated with a plan, with optional categories and interest rates.
+-- All liabilities/debts associated with a plan
 CREATE TABLE liabilities (
-    liability_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each liability
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this liability belongs to
-    liability_category_id INTEGER NOT NULL,          -- Reference to the category this liability belongs to
-    liability_name TEXT NOT NULL,                    -- Name of the liability
-    owner TEXT NOT NULL,                             -- Ownership type
-    value REAL NOT NULL,                             -- Current value of the liability
-    interest_rate REAL,                              -- Optional interest rate for the liability
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the liability is included in retirement projections
+    liability_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    liability_category_id INTEGER NOT NULL,
+    liability_name TEXT NOT NULL,
+    owner TEXT NOT NULL,                           -- 'person1', 'person2', or 'joint'
+    value REAL NOT NULL,                          -- Current value
+    interest_rate REAL,                           -- Annual interest rate
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
     FOREIGN KEY (liability_category_id) REFERENCES liability_categories (liability_category_id) ON DELETE CASCADE
 );
 
 -- INFLOWS AND OUTFLOWS TABLE
--- Represents recurring cash flows (income or expenses) associated with a plan.
+-- Regular cash flows (income/expenses)
 CREATE TABLE inflows_outflows (
-    inflow_outflow_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each inflow or outflow
-    plan_id INTEGER NOT NULL,                            -- Reference to the plan this cash flow belongs to
-    type TEXT NOT NULL,                                  -- Whether it is an inflow or outflow
-    name TEXT NOT NULL,                                  -- Name of the inflow or outflow
-    annual_amount REAL NOT NULL,                         -- Annual amount of the cash flow
-    start_date DATE NOT NULL,                            -- Start date of the cash flow
-    end_date DATE,                                       -- End date of the cash flow
-    apply_inflation INTEGER DEFAULT 0,                   -- Whether inflation is applied to the cash flow
+    inflow_outflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    type TEXT NOT NULL,                           -- 'inflow' or 'outflow'
+    name TEXT NOT NULL,
+    owner TEXT NOT NULL,                          -- 'person1', 'person2', or 'joint'
+    annual_amount REAL NOT NULL,
+    start_year INTEGER NOT NULL,                  -- Year-based: "Inheritance in 2025"
+    end_year INTEGER,                             -- Year-based: "Until 2030"
+    apply_inflation INTEGER DEFAULT 0,            -- Should amount inflate over time?
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- RETIREMENT INCOME PLANS TABLE
--- Represents retirement income sources such as Social Security or pensions.
+-- Retirement income sources (Social Security, pensions, etc.)
 CREATE TABLE retirement_income_plans (
-    income_plan_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each income plan
-    plan_id INTEGER NOT NULL,                        -- Reference to the plan this income plan belongs to
-    name TEXT NOT NULL,                              -- Name of the income source
-    owner TEXT NOT NULL,                             -- Ownership type
-    annual_income REAL NOT NULL,                     -- Annual income amount
-    start_age INTEGER NOT NULL,                      -- Age when income starts
-    end_age INTEGER,                                 -- Age when income ends (optional)
-    include_in_nest_egg INTEGER DEFAULT 1,           -- Whether the income is included in retirement projections
+    income_plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    owner TEXT NOT NULL,                          -- 'person1', 'person2', or 'joint'
+    annual_income REAL NOT NULL,
+    start_age INTEGER NOT NULL,                   -- Age-based: "Social Security at 67"
+    end_age INTEGER,                              -- Age-based: "Pension until 85"
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
     FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 );
 
 -- GROWTH RATE CONFIGURATIONS TABLE
--- Centralized table for managing default, custom, and stepwise growth rates.
+-- Manages growth rates for assets and income sources
 CREATE TABLE growth_rate_configurations (
-    growth_rate_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier for each growth rate configuration
-    asset_id INTEGER,                                 -- Reference to an asset (if configuring asset growth)
-    retirement_income_plan_id INTEGER,                -- Reference to a retirement income plan (if configuring income growth)
-    scenario_id INTEGER,                              -- Reference to the scenario (if scenario-specific)
-    configuration_type TEXT NOT NULL,                 -- 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
-    start_date DATE,                                  -- Start date for stepwise growth rates
-    end_date DATE,                                    -- End date for stepwise growth rates
-    growth_rate REAL NOT NULL,                        -- Growth rate value
-
+    growth_rate_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER,                               -- Optional: if configuring asset growth
+    retirement_income_plan_id INTEGER,              -- Optional: if configuring income growth
+    scenario_id INTEGER,                            -- Optional: if scenario-specific
+    configuration_type TEXT NOT NULL,               -- 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
+    start_year INTEGER NOT NULL,                    -- Year-based: Market projections by year
+    end_year INTEGER,                               -- Year-based: Market projections by year
+    growth_rate REAL NOT NULL,                      -- Annual rate
+    
     FOREIGN KEY (asset_id)
         REFERENCES assets (asset_id) ON DELETE CASCADE,
     FOREIGN KEY (retirement_income_plan_id)
@@ -191,46 +249,48 @@ CREATE TABLE growth_rate_configurations (
 );
 
 -- INDEXES
+-- Optimizing common queries and relationships
 
--- Indexes for HOUSEHOLDS
+-- Households
 CREATE INDEX idx_households_name ON households (household_name);
 
--- Indexes for PLANS
+-- Plans
 CREATE INDEX idx_plans_household_id ON plans (household_id);
 
--- Indexes for SCENARIOS
+-- Scenarios
 CREATE INDEX idx_scenarios_plan_id ON scenarios (plan_id);
 
--- Indexes for SCENARIO OVERRIDES
+-- Scenario Overrides
 CREATE INDEX idx_scenario_overrides_scenario_id ON scenario_overrides (scenario_id);
 CREATE INDEX idx_scenario_overrides_asset_id ON scenario_overrides (asset_id);
 CREATE INDEX idx_scenario_overrides_liability_id ON scenario_overrides (liability_id);
 CREATE INDEX idx_scenario_overrides_inflow_outflow_id ON scenario_overrides (inflow_outflow_id);
 CREATE INDEX idx_scenario_overrides_rip_id ON scenario_overrides (retirement_income_plan_id);
 
--- Indexes for ASSET CATEGORIES
+-- Asset Categories
 CREATE INDEX idx_asset_categories_plan_id ON asset_categories (plan_id);
 
--- Indexes for ASSETS
+-- Assets
 CREATE INDEX idx_assets_plan_id ON assets (plan_id);
 CREATE INDEX idx_assets_category_id ON assets (asset_category_id);
 
--- Indexes for LIABILITY CATEGORIES
+-- Liability Categories
 CREATE INDEX idx_liability_categories_plan_id ON liability_categories (plan_id);
 
--- Indexes for LIABILITIES
+-- Liabilities
 CREATE INDEX idx_liabilities_plan_id ON liabilities (plan_id);
 CREATE INDEX idx_liabilities_category_id ON liabilities (liability_category_id);
 
--- Indexes for INFLOWS AND OUTFLOWS
+-- Inflows and Outflows
 CREATE INDEX idx_inflows_outflows_plan_id ON inflows_outflows (plan_id);
 CREATE INDEX idx_inflows_outflows_type ON inflows_outflows (type);
+CREATE INDEX idx_inflows_outflows_years ON inflows_outflows (start_year, end_year);
 
--- Indexes for RETIREMENT INCOME PLANS
+-- Retirement Income Plans
 CREATE INDEX idx_retirement_income_plans_plan_id ON retirement_income_plans (plan_id);
 
--- Indexes for GROWTH RATE CONFIGURATIONS
+-- Growth Rate Configurations
 CREATE INDEX idx_growth_rate_configurations_asset_id ON growth_rate_configurations (asset_id);
 CREATE INDEX idx_growth_rate_configurations_rip_id ON growth_rate_configurations (retirement_income_plan_id);
 CREATE INDEX idx_growth_rate_configurations_scenario_id ON growth_rate_configurations (scenario_id);
-CREATE INDEX idx_growth_rate_configurations_dates ON growth_rate_configurations (start_date, end_date);```
+CREATE INDEX idx_growth_rate_configurations_years ON growth_rate_configurations (start_year, end_year);

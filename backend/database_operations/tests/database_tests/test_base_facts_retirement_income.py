@@ -1,207 +1,191 @@
 # backend/database_operations/tests/database_tests/test_base_facts_retirement_income.py
 
-"""Tests for base facts retirement income calculations."""
-import pytest
-from datetime import date, timedelta
-from decimal import Decimal
+"""Tests for retirement income calculations.
 
+This test suite verifies the year-based retirement income calculations,
+demonstrating how retirement income is tracked and calculated on a yearly basis.
+"""
+
+import pytest
+from decimal import Decimal
 from ...calculations.base_facts.retirement_income import (
     RetirementIncomeFact,
     calculate_retirement_income_value,
     aggregate_retirement_income_by_owner,
-    calculate_total_retirement_income
+    calculate_total_retirement_income,
+    OwnerType
 )
-from ...calculations.base_facts import OwnerType
 
 # Test Data
-BASE_DATE = date(2025, 1, 1)
-PERSON1_DOB = date(1960, 1, 1)  # 65 in 2025
-PERSON2_DOB = date(1962, 1, 1)  # 63 in 2025
-ONE_YEAR_LATER = BASE_DATE + timedelta(days=365)
-TWO_YEARS_LATER = BASE_DATE + timedelta(days=365 * 2)
-
 SAMPLE_RETIREMENT_INCOMES = [
-    {  # Social Security - starts immediately in 2025
-        'annual_income': 50000.0,
-        'name': 'Social Security',
-        'owner': 'Person 1',
-        'start_age': 65,
-        'end_age': None,
-        'include_in_nest_egg': True,
-        'apply_inflation': True
-    },
-    {  # Pension - starts in 2027 (age 67)
-        'annual_income': 24000.0,
-        'name': 'Pension',
-        'owner': 'Person 1',
-        'start_age': 67,
-        'end_age': 85,
-        'include_in_nest_egg': True,
-        'apply_inflation': False
-    },
-    {  # Spouse's Social Security - starts in 2027 (age 65)
-        'annual_income': 30000.0,
-        'name': 'Spouse Social Security',
-        'owner': 'Person 2',
-        'start_age': 65,
-        'end_age': None,
-        'include_in_nest_egg': True,
-        'apply_inflation': True
-    }
+    # Social Security - starts at age 65
+    RetirementIncomeFact(
+        annual_income=50000.00,
+        owner=OwnerType.PERSON_1,
+        include_in_nest_egg=True,
+        name="Social Security",
+        start_age=65,
+        end_age=None,
+        apply_inflation=True,
+        person_dob="1960-01-01"  # Age 65 in 2025
+    ),
+    # Pension - starts at age 67, ends at age 85
+    RetirementIncomeFact(
+        annual_income=24000.00,
+        owner=OwnerType.PERSON_1,
+        include_in_nest_egg=True,
+        name="Pension",
+        start_age=67,
+        end_age=85,
+        apply_inflation=False,
+        person_dob="1960-01-01"  # Age 67 in 2027
+    ),
+    # Spouse's Social Security - starts at age 65
+    RetirementIncomeFact(
+        annual_income=30000.00,
+        owner=OwnerType.PERSON_2,
+        include_in_nest_egg=True,
+        name="Spouse Social Security",
+        start_age=65,
+        end_age=None,
+        apply_inflation=True,
+        person_dob="1962-01-01"  # Age 65 in 2027
+    )
 ]
 
-@pytest.fixture
-def sample_income():
-    """Create a sample retirement income for testing."""
-    return RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[0])
 
-def test_retirement_income_fact_creation():
-    """Test creation of RetirementIncomeFact from database row."""
-    income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[0])
-    assert income.annual_income == 50000.0
-    assert income.name == 'Social Security'
-    assert income.owner == OwnerType.PERSON_1
-    assert income.start_age == 65
-    assert income.end_age is None
-    assert income.include_in_nest_egg == True
-    assert income.apply_inflation == True
-
-def test_calculate_retirement_income_value_not_yet_active():
-    """Test retirement income calculation before start age."""
-    income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[1])  # Pension starts at 67
-    result = calculate_retirement_income_value(income, BASE_DATE, PERSON1_DOB)
+def test_retirement_income_activation():
+    """Test when retirement income becomes active based on age."""
+    income = SAMPLE_RETIREMENT_INCOMES[0]  # Social Security at 65
     
-    assert result['annual_amount'] == 24000.0
+    # Before retirement age (2024 - age 64)
+    result = calculate_retirement_income_value(income, 2024)
+    assert not result['is_active']
     assert result['adjusted_amount'] == 0.0
-    assert result['is_active'] == False
-    assert result['inflation_applied'] == False
+    
+    # At retirement age (2025 - age 65)
+    result = calculate_retirement_income_value(income, 2025)
+    assert result['is_active']
+    assert result['adjusted_amount'] == 50000.00
+    
+    # After retirement age (2026 - age 66)
+    result = calculate_retirement_income_value(income, 2026)
+    assert result['is_active']
+    assert result['adjusted_amount'] == 50000.00
 
-def test_calculate_retirement_income_value_with_inflation():
-    """Test retirement income calculation with inflation adjustment."""
-    income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[0])  # Social Security
-    result = calculate_retirement_income_value(
-        income,
-        ONE_YEAR_LATER,
-        PERSON1_DOB,
-        inflation_rate=0.03,
-        base_date=BASE_DATE
-    )
-    
-    expected = float(
-        (Decimal('50000') * (Decimal('1') + Decimal('0.03')))
-        .quantize(Decimal('0.01'))
-    )
-    
-    assert result['annual_amount'] == 50000.0
-    assert abs(result['adjusted_amount'] - expected) < 0.01
-    assert result['is_active'] == True
-    assert result['inflation_applied'] == True
 
-def test_calculate_retirement_income_value_no_inflation():
-    """Test retirement income calculation without inflation adjustment."""
-    income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[1])  # Pension
-    result = calculate_retirement_income_value(
-        income,
-        TWO_YEARS_LATER,  # Now active (age 67)
-        PERSON1_DOB,
-        inflation_rate=0.03,
-        base_date=BASE_DATE
-    )
+def test_retirement_income_with_end_age():
+    """Test retirement income with end age consideration."""
+    income = SAMPLE_RETIREMENT_INCOMES[1]  # Pension ends at 85
     
-    assert result['annual_amount'] == 24000.0
-    assert result['adjusted_amount'] == 24000.0
-    assert result['is_active'] == True
-    assert result['inflation_applied'] == False
-
-def test_calculate_retirement_income_value_with_end_age():
-    """Test retirement income calculation with end age consideration."""
-    income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[1])  # Pension ends at 85
+    # At start age (2027 - age 67)
+    result = calculate_retirement_income_value(income, 2027)
+    assert result['is_active']
+    assert result['adjusted_amount'] == 24000.00
     
-    # Test at age 67 (active)
-    result = calculate_retirement_income_value(
-        income,
-        TWO_YEARS_LATER,
-        PERSON1_DOB,
-        base_date=BASE_DATE
-    )
-    assert result['is_active'] == True
-    assert result['adjusted_amount'] == 24000.0
+    # During active years (2040 - age 80)
+    result = calculate_retirement_income_value(income, 2040)
+    assert result['is_active']
+    assert result['adjusted_amount'] == 24000.00
     
-    # Test at age 86 (inactive)
-    future_date = date(2046, 1, 1)  # Age 86
-    result = calculate_retirement_income_value(
-        income,
-        future_date,
-        PERSON1_DOB,
-        base_date=BASE_DATE
-    )
-    assert result['is_active'] == False
+    # After end age (2046 - age 86)
+    result = calculate_retirement_income_value(income, 2046)
+    assert not result['is_active']
     assert result['adjusted_amount'] == 0.0
 
-def test_aggregate_retirement_income_by_owner():
-    """Test grouping and calculating retirement incomes by owner."""
-    incomes = [RetirementIncomeFact.from_db_row(row) for row in SAMPLE_RETIREMENT_INCOMES]
-    results = aggregate_retirement_income_by_owner(
-        incomes,
-        TWO_YEARS_LATER,  # 2027 - both people eligible for Social Security
-        PERSON1_DOB,
-        PERSON2_DOB,
-        base_date=BASE_DATE
-    )
-    
-    assert OwnerType.PERSON_1.value in results
-    assert OwnerType.PERSON_2.value in results
-    assert len(results[OwnerType.PERSON_1.value]) == 2  # Social Security and Pension
-    assert len(results[OwnerType.PERSON_2.value]) == 1  # Spouse's Social Security
-    
-    # Check person1's incomes
-    person1_active = [i for i in results[OwnerType.PERSON_1.value] if i['is_active']]
-    assert len(person1_active) == 2
-    
-    # Check person2's incomes
-    person2_active = [i for i in results[OwnerType.PERSON_2.value] if i['is_active']]
-    assert len(person2_active) == 1
 
-def test_calculate_total_retirement_income():
+def test_inflation_adjustment():
+    """Test inflation adjustments over multiple years."""
+    income = SAMPLE_RETIREMENT_INCOMES[0]  # Social Security with inflation
+    inflation_rate = 0.03  # 3% inflation
+    
+    # Start year - no inflation yet
+    result = calculate_retirement_income_value(income, 2025, inflation_rate)
+    assert result['adjusted_amount'] == 50000.00
+    assert not result['inflation_applied']
+    
+    # One year of inflation
+    result = calculate_retirement_income_value(income, 2026, inflation_rate, base_year=2025)
+    assert result['adjusted_amount'] == 51500.00
+    assert result['inflation_applied']
+    
+    # Two years of inflation
+    result = calculate_retirement_income_value(income, 2027, inflation_rate, base_year=2025)
+    assert abs(result['adjusted_amount'] - 53045.00) < 0.01
+
+
+def test_owner_aggregation():
+    """Test aggregation of retirement income by owner."""
+    year = 2027  # Both people have active income
+    inflation_rate = 0.03
+    
+    aggregated = aggregate_retirement_income_by_owner(SAMPLE_RETIREMENT_INCOMES, year, inflation_rate, base_year=2025)
+    
+    # Should have both owners
+    assert OwnerType.PERSON_1.value in aggregated
+    assert OwnerType.PERSON_2.value in aggregated
+    
+    # Person 1 should have both Social Security and Pension active
+    person1_incomes = aggregated[OwnerType.PERSON_1.value]
+    assert len(person1_incomes) == 2
+    assert all(income['is_active'] for income in person1_incomes)
+    
+    # Person 2 should have Social Security active
+    person2_incomes = aggregated[OwnerType.PERSON_2.value]
+    assert len(person2_incomes) == 1
+    assert all(income['is_active'] for income in person2_incomes)
+
+
+def test_total_calculations():
     """Test calculation of total retirement income values."""
-    incomes = [RetirementIncomeFact.from_db_row(row) for row in SAMPLE_RETIREMENT_INCOMES]
-    result = calculate_total_retirement_income(
-        incomes,
-        TWO_YEARS_LATER,  # 2027 - all incomes active
-        PERSON1_DOB,
-        PERSON2_DOB,
-        base_date=BASE_DATE
-    )
+    year = 2027  # All incomes active
+    inflation_rate = 0.03
     
-    # At 2027: All incomes active (50000 + 24000 + 30000)
-    expected_total = 104000.0
-    assert abs(result['total_income'] - expected_total) < 0.01
+    totals = calculate_total_retirement_income(SAMPLE_RETIREMENT_INCOMES, year, inflation_rate, base_year=2025)
     
-    assert result['metadata']['incomes']['total'] == 3
-    assert result['metadata']['incomes']['active'] == 3
+    # Expected values for 2027:
+    # - Person 1 Social Security: 53,045.00 (with 2 years inflation)
+    # - Person 1 Pension: 24,000.00 (no inflation)
+    # - Person 2 Social Security: 30,000.00 (just started, no inflation yet)
+    # Total: 107,045.00
+    assert abs(totals['total_income'] - 107045.00) < 0.01
+    assert abs(totals['nest_egg_income'] - 107045.00) < 0.01  # All included in nest egg
+    
+    assert totals['metadata']['incomes']['total'] == 3
+    assert totals['metadata']['incomes']['active'] == 3
 
-def test_calculate_total_retirement_income_with_inflation():
-    """Test calculation of total retirement income with inflation adjustment."""
-    incomes = [RetirementIncomeFact.from_db_row(row) for row in SAMPLE_RETIREMENT_INCOMES]
-    result = calculate_total_retirement_income(
-        incomes,
-        TWO_YEARS_LATER,
-        PERSON1_DOB,
-        PERSON2_DOB,
-        inflation_rate=0.03,
-        base_date=BASE_DATE
+
+def test_base_year_override():
+    """Test using a different base year for inflation calculations."""
+    income = SAMPLE_RETIREMENT_INCOMES[0]  # Social Security with inflation
+    inflation_rate = 0.03
+    
+    # Calculate with default base year (2025 - start year)
+    result1 = calculate_retirement_income_value(income, 2027, inflation_rate)
+    
+    # Calculate with explicit earlier base year
+    result2 = calculate_retirement_income_value(income, 2027, inflation_rate, base_year=2024)
+    
+    # Should have more inflation applied with earlier base year
+    assert result2['adjusted_amount'] > result1['adjusted_amount']
+
+
+def test_decimal_precision():
+    """Test handling of decimal precision in calculations."""
+    # Create an income with an odd amount to test rounding
+    income = RetirementIncomeFact(
+        annual_income=50000.33,
+        owner=OwnerType.PERSON_1,
+        include_in_nest_egg=True,
+        name="Test",
+        start_age=65,
+        end_age=None,
+        apply_inflation=True,
+        person_dob="1960-01-01"
     )
     
-    # Calculate expected values with inflation
-    ss_with_inflation = float(
-        (Decimal('50000') * (Decimal('1') + Decimal('0.03')) ** Decimal('2'))
-        .quantize(Decimal('0.01'))
-    )
-    spouse_ss_with_inflation = float(
-        (Decimal('30000') * (Decimal('1') + Decimal('0.03')) ** Decimal('2'))
-        .quantize(Decimal('0.01'))
-    )
-    pension_no_inflation = 24000.0
+    result = calculate_retirement_income_value(income, 2025)
     
-    expected_total = ss_with_inflation + spouse_ss_with_inflation + pension_no_inflation
-    assert abs(result['total_income'] - expected_total) < 0.01 
+    # Should maintain 2 decimal places
+    assert isinstance(result['annual_amount'], float)
+    assert str(result['annual_amount']).split('.')[1] == '33' 

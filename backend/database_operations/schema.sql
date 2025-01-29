@@ -151,8 +151,8 @@ CREATE TABLE retirement_income_plans (
 	annual_income FLOAT NOT NULL, 
 	start_age INTEGER NOT NULL, 
 	end_age INTEGER, 
-	include_in_nest_egg INTEGER NOT NULL,
-	apply_inflation INTEGER DEFAULT 0 NOT NULL,
+	include_in_nest_egg INTEGER NOT NULL, 
+	apply_inflation INTEGER NOT NULL, 
 	PRIMARY KEY (income_plan_id), 
 	FOREIGN KEY(plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
 )
