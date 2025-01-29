@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="fiply2_database.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="browser pragmas query structure" current="0"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="4598"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="inflows_outflows" custom_title="0" dock_id="1" table="4,16:maininflows_outflows"/><dock_state state="000000ff00000000fd0000000100000002000009f4000004eefc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000009f40000011e00ffffff000002700000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="asset_categories" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="110"/><column index="2" value="52"/><column index="3" value="94"/><column index="4" value="94"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="assets" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="55"/><column index="2" value="52"/><column index="3" value="112"/><column index="4" value="75"/><column index="5" value="43"/><column index="6" value="38"/><column index="7" value="124"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="base_assumptions" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="52"/><column index="2" value="109"/><column index="3" value="109"/><column index="4" value="74"/><column index="5" value="74"/><column index="6" value="111"/><column index="7" value="124"/><column index="8" value="84"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="growth_rate_configurations" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="95"/><column index="2" value="57"/><column index="3" value="165"/><column index="4" value="74"/><column index="5" value="114"/><column index="6" value="66"/><column index="7" value="61"/><column index="8" value="78"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="households" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="83"/><column index="2" value="103"/><column index="3" value="120"/><column index="4" value="118"/><column index="5" value="85"/><column index="6" value="120"/><column index="7" value="118"/><column index="8" value="81"/><column index="9" value="210"/><column index="10" value="210"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="inflows_outflows" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="110"/><column index="2" value="52"/><column index="3" value="33"/><column index="4" value="39"/><column index="5" value="96"/><column index="6" value="66"/><column index="7" value="61"/><column index="8" value="92"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="liabilities" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="67"/><column index="2" value="52"/><column index="3" value="124"/><column index="4" value="87"/><column index="5" value="43"/><column index="6" value="38"/><column index="7" value="81"/><column index="8" value="124"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="liability_categories" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="122"/><column index="2" value="52"/><column index="3" value="109"/><column index="4" value="94"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="plans" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="50"/><column index="2" value="85"/><column index="3" value="70"/><column index="4" value="68"/><column index="5" value="216"/><column index="6" value="316"/><column index="7" value="58"/><column index="8" value="95"/><column index="9" value="118"/><column index="10" value="88"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="retirement_income_plans" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="97"/><column index="2" value="52"/><column index="3" value="39"/><column index="4" value="43"/><column index="5" value="93"/><column index="6" value="62"/><column index="7" value="56"/><column index="8" value="124"/><column index="9" value="92"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenario_assumptions" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="74"/><column index="2" value="109"/><column index="3" value="109"/><column index="4" value="124"/><column index="5" value="84"/><column index="6" value="169"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenario_overrides" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="72"/><column index="2" value="74"/><column index="3" value="57"/><column index="4" value="69"/><column index="5" value="112"/><column index="6" value="165"/><column index="7" value="86"/><column index="8" value="91"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="scenarios" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="72"/><column index="2" value="52"/><column index="3" value="93"/><column index="4" value="89"/><column index="5" value="68"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">INSERT INTO households (household_name, person1_first_name, person1_last_name, person1_dob, person2_first_name, person2_last_name, person2_dob, created_at, updated_at)
+VALUES ('Test Household E', 'David', 'Wilson', '1975-04-30', 'Maria', 'Wilson', '1978-09-12', DATETIME('now'), DATETIME('now'));
+
+INSERT INTO plans (household_id, plan_name, created_at, updated_at, description, is_active, target_fire_age, target_fire_amount, risk_tolerance)
+VALUES ((SELECT MAX(household_id) FROM households), 'International Retirement Plan', DATETIME('now'), DATETIME('now'), 'Multi-currency retirement strategy with overseas assets', 1, 58, 4000000, 'Aggressive');
+
+INSERT INTO base_assumptions (plan_id, retirement_age_1, retirement_age_2, final_age_1, final_age_2, final_age_selector, default_growth_rate, inflation_rate)
+VALUES ((SELECT MAX(plan_id) FROM plans), 58, 60, 95, 95, 1, 0.065, 0.031);
+
+INSERT INTO asset_categories (plan_id, category_name, category_order)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'International Real Estate', 1),
+((SELECT MAX(plan_id) FROM plans), 'Global Equities', 2),
+((SELECT MAX(plan_id) FROM plans), 'Cryptocurrency', 3),
+((SELECT MAX(plan_id) FROM plans), 'Startup Investments', 4);
+
+INSERT INTO liability_categories (plan_id, category_name, category_order)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'International Mortgages', 1),
+((SELECT MAX(plan_id) FROM plans), 'Business Loans', 2),
+((SELECT MAX(plan_id) FROM plans), 'Personal Credit', 3);
+
+INSERT INTO assets (plan_id, asset_category_id, asset_name, owner, value, include_in_nest_egg)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-3 FROM asset_categories), 'London Property', 'Joint', 900000, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-2 FROM asset_categories), 'Global ETF Portfolio', 'Person 1', 750000, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id)-1 FROM asset_categories), 'Bitcoin Holdings', 'Person 2', 100000, 0),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(asset_category_id) FROM asset_categories), 'Tech Startup Shares', 'Person 1', 250000, 0);
+
+INSERT INTO liabilities (plan_id, liability_category_id, liability_name, owner, value, interest_rate, include_in_nest_egg)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id)-2 FROM liability_categories), 'London Mortgage', 'Joint', 600000, 0.0325, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id)-1 FROM liability_categories), 'Startup Loan', 'Person 1', 150000, 0.0675, 1),
+((SELECT MAX(plan_id) FROM plans), (SELECT MAX(liability_category_id) FROM liability_categories), 'Credit Lines', 'Person 2', 25000, 0.089, 0);
+
+INSERT INTO inflows_outflows (plan_id, type, name, annual_amount, start_date, end_date, apply_inflation)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Tech Executive Salary', 225000, '2024-01-01', '2028-12-31', 1),
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Rental Income London', 45000, '2024-01-01', NULL, 1),
+((SELECT MAX(plan_id) FROM plans), 'INFLOW', 'Consulting Revenue', 80000, '2024-01-01', '2030-12-31', 1),
+((SELECT MAX(plan_id) FROM plans), 'OUTFLOW', 'International Property Management', 12000, '2024-01-01', NULL, 1);
+
+INSERT INTO retirement_income_plans (plan_id, name, owner, annual_income, start_age, end_age, include_in_nest_egg, apply_inflation)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'UK Pension', 'Person 1', 40000, 58, NULL, 1, 1),
+((SELECT MAX(plan_id) FROM plans), 'EU Pension', 'Person 2', 35000, 60, NULL, 1, 1),
+((SELECT MAX(plan_id) FROM plans), 'Deferred Comp Plan', 'Person 1', 75000, 58, 68, 1, 0);
+
+INSERT INTO scenarios (plan_id, scenario_name, scenario_color, created_at)
+VALUES 
+((SELECT MAX(plan_id) FROM plans), 'Crypto Boom', '#FFD700', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Startup Exit', '#9370DB', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Conservative Pivot', '#20B2AA', DATETIME('now')),
+((SELECT MAX(plan_id) FROM plans), 'Early Exit', '#FF6347', DATETIME('now'));
+
+INSERT INTO growth_rate_configurations (asset_id, configuration_type, start_date, end_date, growth_rate)
+VALUES 
+((SELECT MAX(asset_id)-3 FROM assets), 'STEPWISE', '2024-01-01', '2025-12-31', 0.04),
+((SELECT MAX(asset_id)-3 FROM assets), 'STEPWISE', '2026-01-01', '2028-12-31', 0.06),
+((SELECT MAX(asset_id)-2 FROM assets), 'OVERRIDE', NULL, NULL, 0.085),
+((SELECT MAX(asset_id)-1 FROM assets), 'STEPWISE', '2024-01-01', '2024-12-31', 0.50),
+((SELECT MAX(asset_id)-1 FROM assets), 'STEPWISE', '2025-01-01', '2026-12-31', 0.20),
+((SELECT MAX(asset_id) FROM assets), 'STEPWISE', '2024-01-01', '2026-12-31', 0.15);
+
+INSERT INTO scenario_assumptions (scenario_id, retirement_age_1, retirement_age_2, default_growth_rate, inflation_rate, annual_retirement_spending)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), 55, 57, 0.072, 0.035, 150000),
+((SELECT MAX(scenario_id)-2 FROM scenarios), 53, 55, 0.068, 0.033, 180000),
+((SELECT MAX(scenario_id)-1 FROM scenarios), 62, 64, 0.045, 0.028, 120000),
+((SELECT MAX(scenario_id) FROM scenarios), 50, 52, 0.075, 0.034, 200000);
+
+INSERT INTO scenario_overrides (scenario_id, asset_id, override_field, override_value)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), (SELECT MAX(asset_id)-1 FROM assets), 'value', '500000'),
+((SELECT MAX(scenario_id)-2 FROM scenarios), (SELECT MAX(asset_id) FROM assets), 'value', '2000000'),
+((SELECT MAX(scenario_id)-1 FROM scenarios), (SELECT MAX(asset_id)-1 FROM assets), 'remove', 'TRUE'),
+((SELECT MAX(scenario_id) FROM scenarios), (SELECT MAX(asset_id) FROM assets), 'value', '3000000');
+
+INSERT INTO scenario_overrides (scenario_id, retirement_income_plan_id, override_field, override_value)
+VALUES 
+((SELECT MAX(scenario_id)-3 FROM scenarios), (SELECT MAX(income_plan_id)-2 FROM retirement_income_plans), 'annual_income', '50000'),
+((SELECT MAX(scenario_id)-2 FROM scenarios), (SELECT MAX(income_plan_id)-1 FROM retirement_income_plans), 'start_age', '55'),
+((SELECT MAX(scenario_id)-1 FROM scenarios), (SELECT MAX(income_plan_id) FROM retirement_income_plans), 'end_age', '75'),
+((SELECT MAX(scenario_id) FROM scenarios), (SELECT MAX(income_plan_id) FROM retirement_income_plans), 'annual_income', '100000');</sql><current_tab id="0"/></tab_sql></sqlb_project>
