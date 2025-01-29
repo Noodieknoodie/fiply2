@@ -11,6 +11,7 @@ from ...calculations.base_facts.retirement_income import (
     aggregate_retirement_income_by_owner,
     calculate_total_retirement_income
 )
+from ...calculations.base_facts import OwnerType
 
 # Test Data
 BASE_DATE = date(2025, 1, 1)
@@ -23,7 +24,7 @@ SAMPLE_RETIREMENT_INCOMES = [
     {  # Social Security - starts immediately in 2025
         'annual_income': 50000.0,
         'name': 'Social Security',
-        'owner': 'person1',
+        'owner': 'Person 1',
         'start_age': 65,
         'end_age': None,
         'include_in_nest_egg': True,
@@ -32,7 +33,7 @@ SAMPLE_RETIREMENT_INCOMES = [
     {  # Pension - starts in 2027 (age 67)
         'annual_income': 24000.0,
         'name': 'Pension',
-        'owner': 'person1',
+        'owner': 'Person 1',
         'start_age': 67,
         'end_age': 85,
         'include_in_nest_egg': True,
@@ -41,7 +42,7 @@ SAMPLE_RETIREMENT_INCOMES = [
     {  # Spouse's Social Security - starts in 2027 (age 65)
         'annual_income': 30000.0,
         'name': 'Spouse Social Security',
-        'owner': 'person2',
+        'owner': 'Person 2',
         'start_age': 65,
         'end_age': None,
         'include_in_nest_egg': True,
@@ -59,7 +60,7 @@ def test_retirement_income_fact_creation():
     income = RetirementIncomeFact.from_db_row(SAMPLE_RETIREMENT_INCOMES[0])
     assert income.annual_income == 50000.0
     assert income.name == 'Social Security'
-    assert income.owner == 'person1'
+    assert income.owner == OwnerType.PERSON_1
     assert income.start_age == 65
     assert income.end_age is None
     assert income.include_in_nest_egg == True
@@ -148,17 +149,17 @@ def test_aggregate_retirement_income_by_owner():
         base_date=BASE_DATE
     )
     
-    assert 'person1' in results
-    assert 'person2' in results
-    assert len(results['person1']) == 2  # Social Security and Pension
-    assert len(results['person2']) == 1  # Spouse's Social Security
+    assert OwnerType.PERSON_1.value in results
+    assert OwnerType.PERSON_2.value in results
+    assert len(results[OwnerType.PERSON_1.value]) == 2  # Social Security and Pension
+    assert len(results[OwnerType.PERSON_2.value]) == 1  # Spouse's Social Security
     
     # Check person1's incomes
-    person1_active = [i for i in results['person1'] if i['is_active']]
+    person1_active = [i for i in results[OwnerType.PERSON_1.value] if i['is_active']]
     assert len(person1_active) == 2
     
     # Check person2's incomes
-    person2_active = [i for i in results['person2'] if i['is_active']]
+    person2_active = [i for i in results[OwnerType.PERSON_2.value] if i['is_active']]
     assert len(person2_active) == 1
 
 def test_calculate_total_retirement_income():

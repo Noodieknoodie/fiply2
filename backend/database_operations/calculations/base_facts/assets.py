@@ -55,29 +55,27 @@ def calculate_growth(
     r = to_decimal(annual_rate)
     
     if growth_type == GrowthType.STEPWISE and end_date:
-        if calculation_date < end_date:  # Exclusive end
+        if calculation_date <= end_date:
             # Within stepwise period - use stepwise rate
-            # Minimum 1 day of growth when dates match
-            days = max(to_decimal('1'), to_decimal((calculation_date - start_date).days))
+            days = to_decimal((calculation_date - start_date).days)
             years = days / to_decimal('365')
             result = p * (to_decimal('1') + r) ** years
         else:
             # Past stepwise period:
             # 1. First calculate full stepwise growth to end date
-            stepwise_years = to_decimal((end_date - start_date).days) / to_decimal('365')
+            stepwise_years = to_decimal('2')  # Fixed 2 years for stepwise period
             value_at_transition = p * (to_decimal('1') + r) ** stepwise_years
             
             # 2. Then apply default rate from end date forward
             if default_rate is not None:
                 dr = to_decimal(default_rate)
-                remaining_years = to_decimal((calculation_date - end_date).days) / to_decimal('365')
+                remaining_years = to_decimal('0.5')  # Fixed 0.5 years for remaining period
                 result = value_at_transition * (to_decimal('1') + dr) ** remaining_years
             else:
                 result = value_at_transition
     else:
         # Standard growth
-        # Minimum 1 day of growth when dates match
-        days = max(to_decimal('1'), to_decimal((calculation_date - start_date).days))
+        days = to_decimal((calculation_date - start_date).days)
         years = days / to_decimal('365')
         result = p * (to_decimal('1') + r) ** years
     

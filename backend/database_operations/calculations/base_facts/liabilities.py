@@ -48,55 +48,46 @@ def calculate_liability_value(
     """
     Calculate the current and projected value of a liability.
     
-    Liabilities only grow if they have an interest rate - there is no default growth.
-    - If no interest_rate: value stays exactly the same
-    - If has interest_rate: compounds daily from base_date
+    Following financial industry standard:
+    - Liabilities only grow if they have an interest rate
+    - Growth starts AFTER the base date
+    - Growth is compounded daily
     
     Args:
-        liability: The liability to calculate values for
-        calculation_date: The date to project the value to
+        liability: The liability to calculate
+        calculation_date: The date to calculate the value for
         base_date: The starting date for calculations
         
     Returns:
-        Dictionary containing current and projected values, applied interest rate,
-        and whether the liability is included in total calculations
+        Dictionary containing the liability details and calculated values
     """
     # Convert values to Decimal for precise calculations
-    principal = to_decimal(liability.value)
+    current_value = to_decimal(liability.value)
     
-    # If no interest rate, value stays exactly the same
-    if liability.interest_rate is None:
+    # If no interest rate, return current value with no projection
+    if not liability.interest_rate:
         return {
-            'current_value': to_float(principal),
-            'projected_value': to_float(principal),  # Same as current
-            'interest_rate': None,
-            'included_in_totals': liability.include_in_nest_egg
+            'name': liability.name,
+            'current_value': to_float(current_value),
+            'projected_value': None,
+            'interest_applied': False
         }
     
-    # If before start date, no growth yet
-    if calculation_date < base_date:
-        return {
-            'current_value': to_float(principal),
-            'projected_value': to_float(principal),  # Same as current
-            'interest_rate': liability.interest_rate,
-            'included_in_totals': liability.include_in_nest_egg
-        }
+    # Calculate growth if we have an interest rate and are past base date
+    projected_value = current_value
+    interest_applied = False
     
-    # Has interest rate and at/after start date - apply compound interest
-    rate = to_decimal(liability.interest_rate)
-    
-    # Calculate days of growth (minimum 1 day when dates match)
-    days = max(to_decimal('1'), to_decimal((calculation_date - base_date).days))
-    years = days / to_decimal('365')
-    
-    # Calculate compound interest using: P * (1 + r)^t
-    projected_value = principal * (to_decimal('1') + rate) ** years
+    if liability.interest_rate and calculation_date > base_date:
+        years = to_decimal((calculation_date - base_date).days) / to_decimal('365')
+        interest_factor = (to_decimal('1') + to_decimal(liability.interest_rate)) ** years
+        projected_value *= interest_factor
+        interest_applied = True
     
     return {
-        'current_value': to_float(principal),
+        'name': liability.name,
+        'current_value': to_float(current_value),
         'projected_value': to_float(projected_value),
-        'interest_rate': liability.interest_rate,
-        'included_in_totals': liability.include_in_nest_egg
+        'interest_applied': interest_applied
     }
 
 def aggregate_liabilities_by_category(
