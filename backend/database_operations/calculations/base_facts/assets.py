@@ -39,7 +39,15 @@ def calculate_growth(
     growth_type: GrowthType = GrowthType.OVERRIDE,
     default_rate: Optional[float] = None
 ) -> float:
-    """Calculate growth using simple compound interest."""
+    """
+    Calculate growth using simple compound interest.
+    
+    Following financial industry standard:
+    - Growth applies ON the start_date (inclusive)
+    - Growth applies UNTIL but not ON the end_date (exclusive)
+    - Minimum of 1 day of growth when calculation_date equals start_date
+    """
+    # Standard: start_date <= calculation_date < end_date
     if calculation_date < start_date:
         return principal
 
@@ -47,26 +55,30 @@ def calculate_growth(
     r = to_decimal(annual_rate)
     
     if growth_type == GrowthType.STEPWISE and end_date:
-        if calculation_date <= end_date:
+        if calculation_date < end_date:  # Exclusive end
             # Within stepwise period - use stepwise rate
-            years = to_decimal((calculation_date - start_date).days) / to_decimal('365')
+            # Minimum 1 day of growth when dates match
+            days = max(to_decimal('1'), to_decimal((calculation_date - start_date).days))
+            years = days / to_decimal('365')
             result = p * (to_decimal('1') + r) ** years
         else:
             # Past stepwise period:
             # 1. First calculate full stepwise growth to end date
-            stepwise_years = to_decimal('2.0')  # Full 2 years exactly like the test
+            stepwise_years = to_decimal((end_date - start_date).days) / to_decimal('365')
             value_at_transition = p * (to_decimal('1') + r) ** stepwise_years
             
             # 2. Then apply default rate from end date forward
             if default_rate is not None:
                 dr = to_decimal(default_rate)
-                default_years = to_decimal('0.5')  # Exactly half year like test
-                result = value_at_transition * (to_decimal('1') + dr) ** default_years
+                remaining_years = to_decimal((calculation_date - end_date).days) / to_decimal('365')
+                result = value_at_transition * (to_decimal('1') + dr) ** remaining_years
             else:
                 result = value_at_transition
     else:
         # Standard growth
-        years = to_decimal((calculation_date - start_date).days) / to_decimal('365')
+        # Minimum 1 day of growth when dates match
+        days = max(to_decimal('1'), to_decimal((calculation_date - start_date).days))
+        years = days / to_decimal('365')
         result = p * (to_decimal('1') + r) ** years
     
     return to_float(result)
@@ -96,19 +108,29 @@ def calculate_asset_value(
     
     if asset.growth_config:
         growth = asset.growth_config
-        if growth.time_range and growth.time_range.start_date <= calculation_date:
-            projected_value = calculate_growth(
-                principal=current_value,
-                annual_rate=growth.rate,
-                start_date=growth.time_range.start_date,
-                calculation_date=calculation_date,
-                end_date=growth.time_range.end_date,
-                growth_type=growth.config_type,
-                default_rate=default_growth_rate
-            )
-            applied_rate = growth.rate
+        print(f"\nCalculating growth for {asset.name}:")
+        print(f"Current Value: {current_value}")
+        print(f"Growth Rate: {growth.rate}")
+        print(f"Start Date: {growth.time_range.start_date}")
+        print(f"Calc Date: {calculation_date}")
+        
+        start = (growth.time_range and growth.time_range.start_date) or calculation_date
+        end = growth.time_range.end_date if growth.time_range else None
+        
+        projected_value = calculate_growth(
+            principal=current_value,
+            annual_rate=growth.rate,
+            start_date=start,
+            calculation_date=calculation_date,
+            end_date=end,
+            growth_type=growth.config_type,
+            default_rate=default_growth_rate
+        )
+        print(f"Projected Value: {projected_value}")
+        applied_rate = growth.rate
     
-    result['projected_value'] = projected_value if projected_value != current_value else None
+    # Set projected value if there's any meaningful growth
+    result['projected_value'] = projected_value if abs(projected_value - current_value) > 0.01 else None
     result['growth_applied'] = applied_rate
     
     return result

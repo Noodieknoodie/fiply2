@@ -5,30 +5,34 @@ from decimal import Decimal
 from typing import Dict, List, Optional, TypedDict, Literal
 from enum import Enum
 
-from ...utils.date_utils import is_between_ages
+from ...utils.date_utils import is_between_ages, calculate_age_at_date
+from ...utils.money_utils import to_decimal, to_float
+from . import OwnerType  # Add import for OwnerType
 
 @dataclass
 class RetirementIncomeFact:
-    """Represents a retirement income plan with its core attributes."""
+    """Represents a retirement income source with its core attributes."""
     annual_income: float
+    owner: OwnerType  # Updated to use OwnerType enum
+    include_in_nest_egg: bool
     name: str
-    owner: str
     start_age: int
     end_age: Optional[int]
-    include_in_nest_egg: bool
     apply_inflation: bool
+    person_dob: date
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'RetirementIncomeFact':
         """Create a RetirementIncomeFact from a database row dictionary."""
         return cls(
             annual_income=float(row['annual_income']),
-            name=row['name'],
-            owner=row['owner'],
-            start_age=int(row['start_age']),
-            end_age=row['end_age'] and int(row['end_age']),
+            owner=OwnerType(row['owner']),  # Convert string to enum
             include_in_nest_egg=bool(row['include_in_nest_egg']),
-            apply_inflation=bool(row['apply_inflation'])
+            name=row['name'],
+            start_age=int(row['start_age']),
+            end_age=int(row['end_age']) if row.get('end_age') is not None else None,
+            apply_inflation=bool(row['apply_inflation']),
+            person_dob=row['person_dob']
         )
 
 class RetirementIncomeValueResult(TypedDict):
@@ -74,7 +78,7 @@ def calculate_retirement_income_value(
     if not is_active:
         return {
             'name': income.name,
-            'owner': income.owner,
+            'owner': str(income.owner),
             'annual_amount': float(annual_amount.quantize(Decimal('0.01'))),
             'adjusted_amount': 0.0,
             'is_active': False,
@@ -94,7 +98,7 @@ def calculate_retirement_income_value(
     
     return {
         'name': income.name,
-        'owner': income.owner,
+        'owner': str(income.owner),
         'annual_amount': float(annual_amount.quantize(Decimal('0.01'))),
         'adjusted_amount': float(adjusted_amount.quantize(Decimal('0.01'))),
         'is_active': True,
@@ -149,6 +153,7 @@ def aggregate_retirement_income_by_owner(
 class TotalRetirementIncomeResult(TypedDict):
     """Type definition for total retirement income calculation results."""
     total_income: float
+    nest_egg_income: float  # Added to match pattern in assets/liabilities
     metadata: Dict[str, Dict[Literal['total', 'active'], int]]
 
 def calculate_total_retirement_income(
@@ -171,7 +176,7 @@ def calculate_total_retirement_income(
         base_date: Starting date for calculations
         
     Returns:
-        Dictionary containing total income and metadata
+        Dictionary containing total income, nest egg income, and metadata
     """
     aggregated = aggregate_retirement_income_by_owner(
         incomes,
@@ -182,8 +187,9 @@ def calculate_total_retirement_income(
         base_date
     )
     
-    # Initialize total as Decimal
+    # Initialize totals as Decimal
     total_income = Decimal('0')
+    nest_egg_income = Decimal('0')
     total_count = 0
     active_count = 0
     
@@ -192,14 +198,17 @@ def calculate_total_retirement_income(
         total_count += len(owner_incomes)
         active_count += sum(1 for income in owner_incomes if income['is_active'])
         
-        total_income += sum(
-            Decimal(str(income['adjusted_amount']))
-            for income in owner_incomes
-            if income['included_in_totals']
-        )
+        for income in owner_incomes:
+            amount = Decimal(str(income['adjusted_amount']))
+            total_income += amount
+            
+            # Only add to nest egg total if included and active
+            if income['included_in_totals'] and income['is_active']:
+                nest_egg_income += amount
     
     return {
         'total_income': float(total_income.quantize(Decimal('0.01'))),
+        'nest_egg_income': float(nest_egg_income.quantize(Decimal('0.01'))),
         'metadata': {
             'incomes': {
                 'total': total_count,

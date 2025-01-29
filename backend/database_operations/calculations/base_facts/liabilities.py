@@ -48,13 +48,14 @@ def calculate_liability_value(
     """
     Calculate the current and projected value of a liability.
     
-    If the liability has an interest rate, compounds the growth from base_date to calculation_date.
-    If no interest rate is specified, the liability value remains constant.
+    Liabilities only grow if they have an interest rate - there is no default growth.
+    - If no interest_rate: value stays exactly the same
+    - If has interest_rate: compounds daily from base_date
     
     Args:
         liability: The liability to calculate values for
         calculation_date: The date to project the value to
-        base_date: The starting date for calculations (defaults to today)
+        base_date: The starting date for calculations
         
     Returns:
         Dictionary containing current and projected values, applied interest rate,
@@ -63,21 +64,32 @@ def calculate_liability_value(
     # Convert values to Decimal for precise calculations
     principal = to_decimal(liability.value)
     
-    # If no interest rate or dates are equal, return current value
-    if liability.interest_rate is None or calculation_date <= base_date:
+    # If no interest rate, value stays exactly the same
+    if liability.interest_rate is None:
         return {
             'current_value': to_float(principal),
-            'projected_value': None,
+            'projected_value': to_float(principal),  # Same as current
+            'interest_rate': None,
+            'included_in_totals': liability.include_in_nest_egg
+        }
+    
+    # If before start date, no growth yet
+    if calculation_date < base_date:
+        return {
+            'current_value': to_float(principal),
+            'projected_value': to_float(principal),  # Same as current
             'interest_rate': liability.interest_rate,
             'included_in_totals': liability.include_in_nest_egg
         }
     
-    # Calculate years between dates for compound interest
-    days = (calculation_date - base_date).days
-    years = to_decimal(days) / to_decimal('365')
+    # Has interest rate and at/after start date - apply compound interest
+    rate = to_decimal(liability.interest_rate)
+    
+    # Calculate days of growth (minimum 1 day when dates match)
+    days = max(to_decimal('1'), to_decimal((calculation_date - base_date).days))
+    years = days / to_decimal('365')
     
     # Calculate compound interest using: P * (1 + r)^t
-    rate = to_decimal(liability.interest_rate)
     projected_value = principal * (to_decimal('1') + rate) ** years
     
     return {

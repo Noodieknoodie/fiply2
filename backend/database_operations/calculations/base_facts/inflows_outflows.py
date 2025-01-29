@@ -55,8 +55,12 @@ def calculate_cash_flow_value(
     Calculate the value of a cash flow at a specific date.
     
     A cash flow is considered active if:
-    - The calculation date is strictly after the start date
-    - AND either there is no end date OR the calculation date is on or before the end date
+    - The calculation date is on or after the start date (inclusive)
+    - AND either there is no end date OR the calculation date is before the end date (exclusive)
+    
+    Following financial industry standard:
+    - Cash flows start ON their start date
+    - Cash flows end BEFORE their end date
     
     Args:
         cash_flow: The cash flow to calculate
@@ -71,7 +75,11 @@ def calculate_cash_flow_value(
     annual_amount = to_decimal(cash_flow.annual_amount)
     
     # Check if flow is active at calculation date
-    is_active = is_date_range_active(calculation_date, cash_flow.start_date, cash_flow.end_date)
+    # Following standard: start_date <= calculation_date < end_date
+    is_active = (
+        cash_flow.start_date <= calculation_date and
+        (cash_flow.end_date is None or calculation_date < cash_flow.end_date)
+    )
     
     if not is_active:
         return {
