@@ -3,9 +3,9 @@ import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
-from ..models import Plan, Household, LiabilityCategory, Liability, Base
-from ..connection import get_session
-from ..crud.financial.liabilities import (
+from database_operations.models import Plan, Household, LiabilityCategory, Liability, Base
+from database_operations.connection import get_session
+from database_operations.crud.financial.liabilities import (
     LiabilityCategoryCreate,
     LiabilityCategoryUpdate,
     LiabilityCreate,
@@ -23,8 +23,8 @@ from ..crud.financial.liabilities import (
     update_liability,
     delete_liability
 )
-from ..crud.plans import PlanCreate, create_plan
-from ..crud.households import HouseholdCreate, create_household
+from database_operations.crud.plans import PlanCreate, create_plan
+from database_operations.crud.households import HouseholdCreate, create_household
 
 @pytest.fixture(autouse=True)
 def cleanup_database():

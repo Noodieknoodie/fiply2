@@ -3,9 +3,9 @@ import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
-from ..connection import get_session
-from ..models import Household
-from ..crud.households import (
+from database_operations.models import Base, Household
+from database_operations.connection import get_session
+from database_operations.crud.households import (
     HouseholdCreate,
     HouseholdUpdate,
     create_household,

@@ -1,3 +1,5 @@
+# The flow starts by building out the core calculations to handle all the necessary data, step by step, ensuring the basics work first. As the need arises, utility functions are created to handle repetitive or complex tasks, keeping the system clean, reusable, and flexible for future features.
+
 # Critical Lessons from Actual Errors
 
 1. Database/Session Issues:
@@ -34,3 +36,39 @@
    - Use try/finally for session cleanup
    - Always specify return types for clarity
    - Keep relationships simple - don't over-nest
+
+
+# CALCULATIONS LESSONS LEARNED
+
+   1. Pattern Reuse Across Calculations  
+   - Mirror existing calculation structures (Assets, Liabilities, Cash Flows, Retirement Income).  
+   - Adapt to schema differences but avoid unnecessary new patterns.  
+
+2. Precision & Financial Calculations  
+   - Use `decimal.Decimal` for all monetary values.  
+   - Convert from `str()` to avoid float precision errors.  
+   - Use `.quantize(Decimal('0.01'))` for currency consistency.  
+
+3. Date Handling & Active State  
+   - Never use `date.today()` in tests—use fixed dates for consistency.  
+   - Use `date_utils.py` for age-to-date conversions.  
+   - **Active state logic:** `start_date <= calculation_date < end_date`.  
+
+4. Debugging Test Failures  
+   - Print actual vs expected values, relevant code, and check README/schema.  
+   - Ensure fixes follow business logic, not just pass tests.  
+
+5. Code Reuse & Helpers  
+   - Use existing utilities (`date_utils.py`, `helpers.py`) instead of duplicating logic.  
+   - Only create new functions when necessary.  
+
+6. Test Environment Consistency  
+   - Always reset test data between runs.  
+   - Ensure database sessions close properly.  
+   - Use SQLite-specific handling (`check_same_thread=False`, `StaticPool`).  
+
+7. SQLAlchemy Best Practices  
+   - Use `back_populates` instead of `backref`.  
+   - Optimize queries—use `lazy="joined"` only when needed.  
+   - Keep relationships simple and explicit.  
+

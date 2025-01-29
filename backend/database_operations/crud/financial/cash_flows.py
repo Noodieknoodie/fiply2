@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ...models import InflowOutflow, Plan
+from ...utils.money_utils import validate_money
 
 @dataclass
 class InflowOutflowCreate:
@@ -42,6 +43,9 @@ def create_inflow_outflow(db: Session, cash_flow_data: InflowOutflowCreate) -> O
         plan = db.scalar(select(Plan).where(Plan.plan_id == cash_flow_data.plan_id))
         if not plan:
             return None
+        
+        # Validate monetary values
+        validate_money(cash_flow_data.annual_amount, "Annual amount")
             
         # Convert bool to int for SQLite
         data_dict = vars(cash_flow_data)
@@ -88,6 +92,10 @@ def update_inflow_outflow(db: Session, inflow_outflow_id: int, cash_flow_data: I
         cash_flow = get_inflow_outflow(db, inflow_outflow_id)
         if not cash_flow:
             return None
+        
+        # Validate monetary values if present
+        if cash_flow_data.annual_amount is not None:
+            validate_money(cash_flow_data.annual_amount, "Annual amount")
             
         update_data = {k: v for k, v in vars(cash_flow_data).items() if v is not None}
         

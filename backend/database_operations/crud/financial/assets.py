@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from ...models import Asset, AssetCategory
+from ...utils.money_utils import validate_money
 
 @dataclass
 class AssetCategoryCreate:
@@ -115,6 +116,9 @@ def reorder_asset_categories(db: Session, plan_id: int, category_orders: dict[in
 
 def create_asset(db: Session, asset_data: AssetCreate) -> Asset:
     """Create a new asset."""
+    # Validate monetary values
+    validate_money(asset_data.value, "Asset value")
+    
     db_asset = Asset(**vars(asset_data))
     db.add(db_asset)
     db.commit()
@@ -146,6 +150,10 @@ def update_asset(db: Session, asset_id: int, asset_data: AssetUpdate) -> Optiona
     db_asset = db.scalar(stmt)
     if not db_asset:
         return None
+    
+    # Validate monetary values if present
+    if asset_data.value is not None:
+        validate_money(asset_data.value, "Asset value")
     
     update_data = {k: v for k, v in vars(asset_data).items() if v is not None}
     for key, value in update_data.items():

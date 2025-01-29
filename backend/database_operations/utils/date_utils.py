@@ -69,4 +69,26 @@ def calculate_prorated_amount(annual_amount: float, start_date: date, end_date: 
     days = (end_date - start_date).days + 1  # Include both start and end dates
     
     # Prorate based on 365-day year
-    return (annual_amount * days) / 365 
+    return (annual_amount * days) / 365
+
+
+def is_date_range_active(check_date: date, start_date: date, end_date: Optional[date]) -> bool:
+    """
+    Determine if a date range is active at a specific date.
+    
+    A date range is considered active if:
+    - The check_date is strictly after the start_date
+    - AND either there is no end_date OR the check_date is on or before the end_date
+    
+    Args:
+        check_date: The date to check
+        start_date: The start date of the range
+        end_date: The optional end date of the range
+        
+    Returns:
+        bool: Whether the range is active at the check_date
+    """
+    return (
+        start_date < check_date and
+        (end_date is None or check_date <= end_date)
+    ) 

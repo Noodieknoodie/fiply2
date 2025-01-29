@@ -3,19 +3,18 @@ import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
-from ..models import Plan, Household, BaseAssumption, Base
-from ..connection import get_session
-from ..crud.plans import (
-    PlanCreate,
+from database_operations.models import Plan, Household, BaseAssumption, Base
+from database_operations.connection import get_session
+from database_operations.crud.base_assumptions import (
     BaseAssumptionCreate,
     BaseAssumptionUpdate,
-    create_plan,
-    create_base_assumptions,
-    get_plan_assumptions,
-    update_base_assumptions,
-    delete_base_assumptions
+    create_base_assumption,
+    get_base_assumption,
+    update_base_assumption,
+    delete_base_assumption
 )
-from ..crud.households import HouseholdCreate, create_household
+from database_operations.crud.plans import PlanCreate, create_plan
+from database_operations.crud.households import HouseholdCreate, create_household
 
 @pytest.fixture(autouse=True)
 def cleanup_database():
@@ -75,7 +74,7 @@ def sample_assumptions_data(sample_plan: Plan):
 
 def test_create_base_assumptions(db_session: Session, sample_assumptions_data: BaseAssumptionCreate):
     """Test creating base assumptions."""
-    assumptions = create_base_assumptions(db_session, sample_assumptions_data)
+    assumptions = create_base_assumption(db_session, sample_assumptions_data)
     
     assert assumptions.plan_id == sample_assumptions_data.plan_id
     assert assumptions.retirement_age_1 == 65
@@ -88,8 +87,8 @@ def test_create_base_assumptions(db_session: Session, sample_assumptions_data: B
 
 def test_get_plan_assumptions(db_session: Session, sample_assumptions_data: BaseAssumptionCreate):
     """Test retrieving base assumptions for a plan."""
-    created_assumptions = create_base_assumptions(db_session, sample_assumptions_data)
-    retrieved_assumptions = get_plan_assumptions(db_session, created_assumptions.plan_id)
+    created_assumptions = create_base_assumption(db_session, sample_assumptions_data)
+    retrieved_assumptions = get_base_assumption(db_session, created_assumptions.plan_id)
     
     assert retrieved_assumptions is not None
     assert retrieved_assumptions.plan_id == created_assumptions.plan_id
@@ -97,19 +96,19 @@ def test_get_plan_assumptions(db_session: Session, sample_assumptions_data: Base
 
 def test_get_nonexistent_assumptions(db_session: Session):
     """Test retrieving assumptions for a non-existent plan."""
-    assumptions = get_plan_assumptions(db_session, 999)
+    assumptions = get_base_assumption(db_session, 999)
     assert assumptions is None
 
 def test_update_base_assumptions(db_session: Session, sample_assumptions_data: BaseAssumptionCreate):
     """Test updating base assumptions."""
-    assumptions = create_base_assumptions(db_session, sample_assumptions_data)
+    assumptions = create_base_assumption(db_session, sample_assumptions_data)
     
     update_data = BaseAssumptionUpdate(
         retirement_age_1=67,
         default_growth_rate=0.08
     )
     
-    updated_assumptions = update_base_assumptions(db_session, assumptions.plan_id, update_data)
+    updated_assumptions = update_base_assumption(db_session, assumptions.plan_id, update_data)
     assert updated_assumptions is not None
     assert updated_assumptions.retirement_age_1 == 67
     assert updated_assumptions.default_growth_rate == 0.08
@@ -120,16 +119,16 @@ def test_update_base_assumptions(db_session: Session, sample_assumptions_data: B
 def test_update_nonexistent_assumptions(db_session: Session):
     """Test updating non-existent assumptions."""
     update_data = BaseAssumptionUpdate(retirement_age_1=67)
-    updated_assumptions = update_base_assumptions(db_session, 999, update_data)
+    updated_assumptions = update_base_assumption(db_session, 999, update_data)
     assert updated_assumptions is None
 
 def test_delete_base_assumptions(db_session: Session, sample_assumptions_data: BaseAssumptionCreate):
     """Test deleting base assumptions."""
-    assumptions = create_base_assumptions(db_session, sample_assumptions_data)
+    assumptions = create_base_assumption(db_session, sample_assumptions_data)
     
-    assert delete_base_assumptions(db_session, assumptions.plan_id) is True
-    assert get_plan_assumptions(db_session, assumptions.plan_id) is None
+    assert delete_base_assumption(db_session, assumptions.plan_id) is True
+    assert get_base_assumption(db_session, assumptions.plan_id) is None
 
 def test_delete_nonexistent_assumptions(db_session: Session):
     """Test deleting non-existent assumptions."""
-    assert delete_base_assumptions(db_session, 999) is False 
+    assert delete_base_assumption(db_session, 999) is False 

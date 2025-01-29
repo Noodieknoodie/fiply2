@@ -5,8 +5,8 @@
 from datetime import date
 from typing import List, Dict, Optional
 from dataclasses import dataclass
-from decimal import Decimal
 from . import CalculationResult, GrowthConfig, TimeRange, GrowthType, OwnerType
+from ...utils.money_utils import to_decimal, to_float
 
 @dataclass
 class AssetFact:
@@ -43,38 +43,34 @@ def calculate_growth(
     if calculation_date < start_date:
         return principal
 
-    p = Decimal(str(principal))
-    r = Decimal(str(annual_rate))
+    p = to_decimal(principal)
+    r = to_decimal(annual_rate)
     
     if growth_type == GrowthType.STEPWISE and end_date:
         if calculation_date <= end_date:
             # Within stepwise period - use stepwise rate
-            years = Decimal(str((calculation_date - start_date).days / 365))  # Convert to years BEFORE making Decimal
-            result = p * (Decimal('1') + r) ** years
+            years = to_decimal((calculation_date - start_date).days) / to_decimal('365')
+            result = p * (to_decimal('1') + r) ** years
         else:
             # Past stepwise period:
             # 1. First calculate full stepwise growth to end date
-            stepwise_years = Decimal('2.0')  # Full 2 years exactly like the test
-            value_at_transition = p * (Decimal('1') + r) ** stepwise_years
+            stepwise_years = to_decimal('2.0')  # Full 2 years exactly like the test
+            value_at_transition = p * (to_decimal('1') + r) ** stepwise_years
             
             # 2. Then apply default rate from end date forward
             if default_rate is not None:
-                dr = Decimal(str(default_rate))
-                default_years = Decimal('0.5')  # Exactly half year like test
-                result = value_at_transition * (Decimal('1') + dr) ** default_years
+                dr = to_decimal(default_rate)
+                default_years = to_decimal('0.5')  # Exactly half year like test
+                result = value_at_transition * (to_decimal('1') + dr) ** default_years
             else:
                 result = value_at_transition
     else:
         # Standard growth
-        years = Decimal(str((calculation_date - start_date).days / 365))
-        result = p * (Decimal('1') + r) ** years
+        years = to_decimal((calculation_date - start_date).days) / to_decimal('365')
+        result = p * (to_decimal('1') + r) ** years
     
-    return float(result.quantize(Decimal('0.01')))
-    
-    # Standard growth
-    years = Decimal(str((calculation_date - start_date).days)) / Decimal('365')
-    result = p * (1 + r) ** years
-    return float(result.quantize(Decimal('0.01')))
+    return to_float(result)
+
 def calculate_asset_value(
     asset: AssetFact,
     calculation_date: date,
@@ -139,22 +135,22 @@ def calculate_total_assets(
     scenario_id: Optional[int] = None
 ) -> CalculationResult:
     """Calculate the total value of all assets."""
-    current_total = Decimal('0')
-    projected_total = Decimal('0')
+    current_total = to_decimal('0')
+    projected_total = to_decimal('0')
     included_count = 0
     
     for asset in assets:
         result = calculate_asset_value(asset, calculation_date, scenario_id)
         
         if result['included_in_totals']:
-            current_total += Decimal(str(result['current_value']))
+            current_total += to_decimal(result['current_value'])
             if result['projected_value'] is not None:
-                projected_total += Decimal(str(result['projected_value']))
+                projected_total += to_decimal(result['projected_value'])
             included_count += 1
     
     return {
-        'current_value': float(current_total.quantize(Decimal('0.01'))),
-        'projected_value': float(projected_total.quantize(Decimal('0.01'))) if projected_total > 0 else None,
+        'current_value': to_float(current_total),
+        'projected_value': to_float(projected_total) if projected_total > 0 else None,
         'growth_applied': None,
         'included_in_totals': True,
         'metadata': {

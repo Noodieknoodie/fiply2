@@ -5,8 +5,9 @@ import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from ..models import Base, Household, Plan, RetirementIncomePlan
-from ..crud.financial.retirement import (
+from database_operations.models import Base, Household, Plan, RetirementIncomePlan
+from database_operations.connection import get_session
+from database_operations.crud.financial.retirement import (
     RetirementIncomePlanCreate,
     RetirementIncomePlanUpdate,
     create_retirement_plan,
@@ -15,6 +16,8 @@ from ..crud.financial.retirement import (
     update_retirement_plan,
     delete_retirement_plan
 )
+from database_operations.crud.plans import PlanCreate, create_plan
+from database_operations.crud.households import HouseholdCreate, create_household
 
 @pytest.fixture(autouse=True)
 def cleanup_database(db_session: Session):

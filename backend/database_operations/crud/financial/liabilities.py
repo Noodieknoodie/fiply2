@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from ...models import Liability, LiabilityCategory
+from ...utils.money_utils import validate_money, validate_rate
 
 @dataclass
 class LiabilityCategoryCreate:
@@ -116,6 +117,11 @@ def reorder_liability_categories(db: Session, plan_id: int, category_orders: dic
 
 def create_liability(db: Session, liability_data: LiabilityCreate) -> Liability:
     """Create a new liability."""
+    # Validate monetary values and rates
+    validate_money(liability_data.value, "Liability value")
+    if liability_data.interest_rate is not None:
+        validate_rate(liability_data.interest_rate, "Interest rate")
+    
     db_liability = Liability(**vars(liability_data))
     db.add(db_liability)
     db.commit()
@@ -147,6 +153,12 @@ def update_liability(db: Session, liability_id: int, liability_data: LiabilityUp
     db_liability = db.scalar(stmt)
     if not db_liability:
         return None
+    
+    # Validate monetary values and rates if present
+    if liability_data.value is not None:
+        validate_money(liability_data.value, "Liability value")
+    if liability_data.interest_rate is not None:
+        validate_rate(liability_data.interest_rate, "Interest rate")
     
     update_data = {k: v for k, v in vars(liability_data).items() if v is not None}
     for key, value in update_data.items():

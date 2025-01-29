@@ -1,11 +1,13 @@
 # backend\database_operations\tests\test_connection.py
 
 import pytest
+from sqlalchemy.orm import Session
+from sqlalchemy.engine import Engine
 from sqlalchemy import inspect
 from datetime import date, datetime
 
-from ..connection import get_engine, get_session
-from ..models import (
+from database_operations.connection import get_engine, get_session
+from database_operations.models import (
     Base, Household, Plan, BaseAssumption, Scenario, ScenarioAssumption,
     ScenarioOverride, AssetCategory, Asset, LiabilityCategory, Liability,
     InflowOutflow, RetirementIncomePlan, GrowthRateConfiguration
