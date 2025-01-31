@@ -22,6 +22,7 @@ CREATE TABLE households (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- PLANS TABLE
 -- Financial plans associated with a household
 CREATE TABLE plans (

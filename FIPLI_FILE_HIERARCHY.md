@@ -1,17 +1,18 @@
 fiply2/
     CURSOR_LESSONS_LEARNED.md
     CURSOR_LOG.md
-    file_hierarchy.txt
     FIPLI_CORE_LOGIC.md
     FIPLI_DB_SCHEMA.md
     FIPLI_FILE_HIERARCHY.md
     FIPLI_PROJECT_OVERVIEW.md
+    generate_schema.py
     gfh.py
+    rules/
+        database-rules.mdc
 backend/
     requirements.txt
     database_operations/
         connection.py
-        generate_schema.py
         models.py
         schema.sql
         __init__.py
