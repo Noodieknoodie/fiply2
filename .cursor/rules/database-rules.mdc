@@ -1,0 +1,9 @@
+---
+description: Explains what responibilities the sql database has vs the backend (python) 
+globs: .py
+---
+## DATABASE RULES: Database does THE BARE MINIMUM: Store the data, Ensure basic referential integrity (foreign keys), Ensure NOT NULL when required, That's it! 
+
+## NO SMART STUFF IN DATABASE: NO calculations, NO date/time manipulation, NO defaults that require computation, NO complex CHECK constraints, NO trying to be helpful. 
+
+## PYTHON HANDLES: ALL calculations, ALL validations, ALL business logic, ALL defaults, ALL data manipulation, ALL type conversion, ALL date/time stuff.
