@@ -1,0 +1,16 @@
+---
+description: State what you know must be true before coding
+globs: 
+---
+# BEFORE CODING:
+
+1. Query the markdown documentation
+2. State what you know from all of the markdown documentation in the root folder that needs to be true for the coding task at hand
+
+
+## MARKDOWN DOCUMENTATION
+
+FIPLI_CORE_LOGIC.md
+FIPLI_DB_SCHEMA.md
+FIPLI_FILE_HIERARCHY.md
+FIPLI_PROJECT_OVERVIEW.md

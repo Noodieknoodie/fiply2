@@ -6,10 +6,10 @@ PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 OUTPUT_FILE = os.path.join(PROJECT_ROOT, "FIPLI_FILE_HIERARCHY.md")
 
 # Exclude completely (hardcoded because these are always useless)
-EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv"}
+EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv", ".cursor"}
 
 # Exclude specific file types
-EXCLUDE_FILES = {"*.pyc", "*.sqbpro"}
+EXCLUDE_FILES = {"*.pyc", "*.sqbpro", "generate_schema.py", "gfh.py"}
 
 # Hide contents for these folders but still show them
 HIDE_CONTENTS_FOR = {"tests"}

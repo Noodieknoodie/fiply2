@@ -1,7 +1,7 @@
 # backend\database_operations\models.py
 from datetime import datetime, date
 from typing import Optional, List
-from sqlalchemy import Integer, String, Float, Date, DateTime, ForeignKey, Text, select, Boolean
+from sqlalchemy import Integer, String, Float, Date, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 
@@ -14,17 +14,16 @@ class Household(Base):
     __tablename__ = "households"
     
     household_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    household_name: Mapped[str] = mapped_column(String, nullable=False)
-    person1_first_name: Mapped[str] = mapped_column(String, nullable=False)
-    person1_last_name: Mapped[str] = mapped_column(String, nullable=False)
+    household_name: Mapped[str] = mapped_column(Text, nullable=False)
+    person1_first_name: Mapped[str] = mapped_column(Text, nullable=False)
+    person1_last_name: Mapped[str] = mapped_column(Text, nullable=False)
     person1_dob: Mapped[date] = mapped_column(Date, nullable=False)
-    person2_first_name: Mapped[Optional[str]] = mapped_column(String)
-    person2_last_name: Mapped[Optional[str]] = mapped_column(String)
+    person2_first_name: Mapped[Optional[str]] = mapped_column(Text)
+    person2_last_name: Mapped[Optional[str]] = mapped_column(Text)
     person2_dob: Mapped[Optional[date]] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    # Relationships with type hints
     plans: Mapped[List["Plan"]] = relationship(back_populates="household", cascade="all, delete-orphan")
 
 class Plan(Base):
@@ -33,27 +32,20 @@ class Plan(Base):
 
     plan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("households.household_id", ondelete="CASCADE"), nullable=False)
-    plan_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    plan_name: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
-    description: Mapped[Optional[str]] = mapped_column(String(500))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    target_fire_age: Mapped[Optional[int]] = mapped_column(Integer)
-    target_fire_amount: Mapped[Optional[float]] = mapped_column(Float)
-    risk_tolerance: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Relationships
-    household: Mapped["Household"] = relationship("Household", back_populates="plans", lazy="joined")
+    household: Mapped["Household"] = relationship("Household", back_populates="plans")
     base_assumptions: Mapped[Optional["BaseAssumption"]] = relationship(
         back_populates="plan", 
         uselist=False,
-        cascade="all, delete-orphan",
-        lazy="joined"
+        cascade="all, delete-orphan"
     )
     scenarios: Mapped[List["Scenario"]] = relationship(
         back_populates="plan",
-        cascade="all, delete-orphan",
-        lazy="joined"
+        cascade="all, delete-orphan"
     )
     asset_categories: Mapped[List["AssetCategory"]] = relationship(
         back_populates="plan", 
@@ -80,9 +72,6 @@ class Plan(Base):
         cascade="all, delete-orphan"
     )
 
-    def __repr__(self) -> str:
-        return f"<Plan {self.plan_name} for household {self.household_id}>"
-
 class BaseAssumption(Base):
     """Stores global assumptions for a plan."""
     __tablename__ = "base_assumptions"
@@ -96,12 +85,7 @@ class BaseAssumption(Base):
     default_growth_rate: Mapped[Optional[float]] = mapped_column(Float)
     inflation_rate: Mapped[Optional[float]] = mapped_column(Float)
 
-    # Relationships with proper type hints
-    plan: Mapped["Plan"] = relationship(
-        "Plan", 
-        back_populates="base_assumptions",
-        lazy="joined"
-    )
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="base_assumptions")
 
 class Scenario(Base):
     """Represents a what-if scenario for a plan."""
@@ -109,30 +93,21 @@ class Scenario(Base):
     
     scenario_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
-    scenario_name: Mapped[str] = mapped_column(String, nullable=False)
-    scenario_color: Mapped[Optional[str]] = mapped_column(String)
+    scenario_name: Mapped[str] = mapped_column(Text, nullable=False)
+    scenario_color: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-    # Relationships with proper type hints and eager loading
-    plan: Mapped["Plan"] = relationship(
-        "Plan", 
-        back_populates="scenarios",
-        lazy="joined"
-    )
-    assumptions: Mapped["ScenarioAssumption"] = relationship(
-        "ScenarioAssumption", 
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="scenarios")
+    assumptions: Mapped[Optional["ScenarioAssumption"]] = relationship(
         back_populates="scenario", 
         uselist=False,
-        cascade="all, delete-orphan", 
-        lazy="joined"
+        cascade="all, delete-orphan"
     )
     overrides: Mapped[List["ScenarioOverride"]] = relationship(
-        "ScenarioOverride", 
         back_populates="scenario", 
         cascade="all, delete-orphan"
     )
     growth_rates: Mapped[List["GrowthRateConfiguration"]] = relationship(
-        "GrowthRateConfiguration", 
         back_populates="scenario", 
         cascade="all, delete-orphan"
     )
@@ -148,12 +123,7 @@ class ScenarioAssumption(Base):
     inflation_rate: Mapped[Optional[float]] = mapped_column(Float)
     annual_retirement_spending: Mapped[Optional[float]] = mapped_column(Float)
 
-    # Relationship with proper type hint
-    scenario: Mapped["Scenario"] = relationship(
-        "Scenario", 
-        back_populates="assumptions",
-        lazy="joined"
-    )
+    scenario: Mapped["Scenario"] = relationship("Scenario", back_populates="assumptions")
 
 class ScenarioOverride(Base):
     """Stores granular overrides for financial components within scenarios."""
@@ -165,10 +135,9 @@ class ScenarioOverride(Base):
     liability_id: Mapped[Optional[int]] = mapped_column(ForeignKey("liabilities.liability_id", ondelete="CASCADE"))
     inflow_outflow_id: Mapped[Optional[int]] = mapped_column(ForeignKey("inflows_outflows.inflow_outflow_id", ondelete="CASCADE"))
     retirement_income_plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("retirement_income_plans.income_plan_id", ondelete="CASCADE"))
-    override_field: Mapped[str] = mapped_column(String, nullable=False)
-    override_value: Mapped[str] = mapped_column(String, nullable=False)
+    override_field: Mapped[str] = mapped_column(Text, nullable=False)
+    override_value: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Relationships
     scenario = relationship("Scenario", back_populates="overrides")
     asset = relationship("Asset", back_populates="overrides")
     liability = relationship("Liability", back_populates="overrides")
@@ -181,10 +150,9 @@ class AssetCategory(Base):
     
     asset_category_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
-    category_name: Mapped[str] = mapped_column(String, nullable=False)
+    category_name: Mapped[str] = mapped_column(Text, nullable=False)
     category_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Relationships
     plan = relationship("Plan", back_populates="asset_categories")
     assets = relationship("Asset", back_populates="category")
 
@@ -195,12 +163,11 @@ class Asset(Base):
     asset_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
     asset_category_id: Mapped[int] = mapped_column(ForeignKey("asset_categories.asset_category_id", ondelete="CASCADE"), nullable=False)
-    asset_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, nullable=False)
+    asset_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
     value: Mapped[float] = mapped_column(Float, nullable=False)
-    include_in_nest_egg: Mapped[bool] = mapped_column(Integer, default=1)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Relationships
     plan = relationship("Plan", back_populates="assets")
     category = relationship("AssetCategory", back_populates="assets")
     overrides = relationship("ScenarioOverride", back_populates="asset")
@@ -212,10 +179,9 @@ class LiabilityCategory(Base):
     
     liability_category_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
-    category_name: Mapped[str] = mapped_column(String, nullable=False)
+    category_name: Mapped[str] = mapped_column(Text, nullable=False)
     category_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Relationships
     plan = relationship("Plan", back_populates="liability_categories")
     liabilities = relationship("Liability", back_populates="category")
 
@@ -226,13 +192,12 @@ class Liability(Base):
     liability_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
     liability_category_id: Mapped[int] = mapped_column(ForeignKey("liability_categories.liability_category_id", ondelete="CASCADE"), nullable=False)
-    liability_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, nullable=False)
+    liability_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
     value: Mapped[float] = mapped_column(Float, nullable=False)
     interest_rate: Mapped[Optional[float]] = mapped_column(Float)
-    include_in_nest_egg: Mapped[bool] = mapped_column(Integer, default=1)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Relationships
     plan = relationship("Plan", back_populates="liabilities")
     category = relationship("LiabilityCategory", back_populates="liabilities")
     overrides = relationship("ScenarioOverride", back_populates="liability")
@@ -243,14 +208,14 @@ class InflowOutflow(Base):
     
     inflow_outflow_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
-    type: Mapped[str] = mapped_column(String, nullable=False)  # 'inflow' or 'outflow'
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    type: Mapped[str] = mapped_column(Text, nullable=False)  # 'inflow' or 'outflow'
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
     annual_amount: Mapped[float] = mapped_column(Float, nullable=False)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[Optional[date]] = mapped_column(Date)
-    apply_inflation: Mapped[bool] = mapped_column(Integer, default=0)
+    start_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer)
+    apply_inflation: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Relationships
     plan = relationship("Plan", back_populates="inflows_outflows")
     overrides = relationship("ScenarioOverride", back_populates="inflow_outflow")
 
@@ -260,15 +225,14 @@ class RetirementIncomePlan(Base):
     
     income_plan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
     annual_income: Mapped[float] = mapped_column(Float, nullable=False)
     start_age: Mapped[int] = mapped_column(Integer, nullable=False)
     end_age: Mapped[Optional[int]] = mapped_column(Integer)
-    include_in_nest_egg: Mapped[bool] = mapped_column(Integer, default=1)
-    apply_inflation: Mapped[bool] = mapped_column(Integer, default=0)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
+    apply_inflation: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Relationships
     plan = relationship("Plan", back_populates="retirement_income_plans")
     overrides = relationship("ScenarioOverride", back_populates="retirement_income_plan")
     growth_rates = relationship("GrowthRateConfiguration", back_populates="retirement_income_plan")
@@ -281,12 +245,11 @@ class GrowthRateConfiguration(Base):
     asset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assets.asset_id", ondelete="CASCADE"))
     retirement_income_plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("retirement_income_plans.income_plan_id", ondelete="CASCADE"))
     scenario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenarios.scenario_id", ondelete="CASCADE"))
-    configuration_type: Mapped[str] = mapped_column(String, nullable=False)  # 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
-    start_date: Mapped[Optional[date]] = mapped_column(Date)
-    end_date: Mapped[Optional[date]] = mapped_column(Date)
+    configuration_type: Mapped[str] = mapped_column(Text, nullable=False)  # 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
+    start_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer)
     growth_rate: Mapped[float] = mapped_column(Float, nullable=False)
 
-    # Relationships
     asset = relationship("Asset", back_populates="growth_rates")
     retirement_income_plan = relationship("RetirementIncomePlan", back_populates="growth_rates")
     scenario = relationship("Scenario", back_populates="growth_rates")

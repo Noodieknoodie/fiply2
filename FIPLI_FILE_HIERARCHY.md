@@ -1,14 +1,10 @@
-fiply2/
+FIPLY2/
     CURSOR_LESSONS_LEARNED.md
     CURSOR_LOG.md
     FIPLI_CORE_LOGIC.md
     FIPLI_DB_SCHEMA.md
     FIPLI_FILE_HIERARCHY.md
     FIPLI_PROJECT_OVERVIEW.md
-    generate_schema.py
-    gfh.py
-    rules/
-        database-rules.mdc
 backend/
     requirements.txt
     database_operations/
@@ -19,20 +15,29 @@ backend/
         calculations/
             __init__.py
             base_facts/
-                aggregator.py
                 assets.py
+                base_facts_calculator.py
                 cash_flows.py
-                growth.py
-                inflows_outflows.py
                 liabilities.py
-                retirement.py
                 retirement_income.py
                 __init__.py
+                base_facts_utils/
+                    assets_helpers.py
+                    base_facts_calculator_helpers.py
+                    cash_flows_helpers.py
+                    liabilities_helpers.py
+                    retirement_income_helpers.py
+            scenario/
+                scenario_calculator.py
+                __init__.py
+                scenario_utils/
+                    scenario_calculator_helper.py
         crud/
             base_assumptions.py
             households.py
             plans.py
             scenarios.py
+            __init__.py
             financial/
                 assets.py
                 cash_flows.py
@@ -44,31 +49,11 @@ backend/
             fiply2_database.db
             schema.sql
         tests/
-            database_tests/
-                conftest.py
-                helpers.py
-                test_aggregator.py
-                test_assets.py
-                test_base_assumptions.py
-                test_base_facts_assets.py
-                test_base_facts_inflows_outflows.py
-                test_base_facts_liabilities.py
-                test_base_facts_retirement_income.py
-                test_cash_flows.py
-                test_connection.py
-                test_growth_rates.py
-                test_households.py
-                test_liabilities.py
-                test_plans.py
-                test_retirement.py
-                test_scenarios.py
-                __init__.py
-            fixtures/
-                date_test_data.py
-            util_tests/
-                test_date_utils.py
-                test_money_utils.py
-                __init__.py
         utils/
-            date_utils.py
+            growth_utils.py
+            growth_validations.py
             money_utils.py
+            money_validations.py
+            time_utils.py
+            time_validations.py
+            __init__.py

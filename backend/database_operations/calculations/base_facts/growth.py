@@ -1,1 +1,0 @@
-# backend/database_operations/calculations/base_facts/growth.py 

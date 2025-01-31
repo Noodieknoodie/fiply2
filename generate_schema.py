@@ -1,48 +1,47 @@
-import os
-from pathlib import Path
-from sqlalchemy.schema import CreateTable
-from sqlalchemy import create_engine
-from backend.database_operations.models import Base
+import sqlite3
 
+db_path = "C:\\CORE FOLDERS\\FIPLY2\\backend\\database_operations\\database\\fiply2_database.db"
+schema_path = "C:\\CORE FOLDERS\\FIPLY2\\backend\\database_operations\\database\\schema.sql"
 
-# Define paths correctly
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # Most parent root (fiply2/)
-BACKEND_DIR = Path(__file__).resolve().parent.parent  # Backend directory
-DB_PATH = BACKEND_DIR / "database_operations" / "database" / "fiply.db"
-SCHEMA_SQL_PATH = BACKEND_DIR / "database_operations" / "database" / "schema.sql"
-SCHEMA_MD_PATH = PROJECT_ROOT / "FIPLI_DB_SCHEMA.md"  # Root directory
+# List of tables in the specified order
+tables = [
+    "households", "plans", "base_assumptions", "scenarios", "scenario_assumptions",
+    "scenario_overrides", "asset_categories", "assets", "liability_categories", "liabilities",
+    "inflows_outflows", "retirement_income_plans", "growth_rate_configurations"
+]
 
-# Create engine
-engine = create_engine(f"sqlite:///{DB_PATH}")
+def get_table_dump(cursor, table_name):
+    """Retrieve the full dump for a specific table."""
+    cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+    result = cursor.fetchone()
+    return result[0] if result and result[0] else f"-- No schema found for {table_name}"
 
-def generate_schema():
-    # Ensure schema.sql path exists
-    SCHEMA_SQL_PATH.parent.mkdir(parents=True, exist_ok=True)
+def get_index_schemas(cursor):
+    """Retrieve all index schemas."""
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")
+    return [row[0] for row in cursor.fetchall()]
 
-    with open(SCHEMA_SQL_PATH, 'w', encoding='utf-8') as f:
-        f.write('-- Generated schema from SQLAlchemy models\n\n')
+def main():
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
         
-        metadata = Base.metadata
-        for table in sorted(metadata.tables.values(), key=lambda t: t.name):
-            f.write(f'{str(CreateTable(table).compile(engine))};\n\n')
+        # Extract schemas
+        schema_statements = ["-- SQLite Database Schema\n"]
+        for table in tables:
+            schema_statements.append(f"-- Schema for {table}\n")
+            schema_statements.append(get_table_dump(cursor, table) + "\n")
+        
+        # Extract indexes
+        schema_statements.append("-- Indexes\n")
+        index_statements = get_index_schemas(cursor)
+        schema_statements.extend(index_statements)
+        
+        # Write to file (overwrite mode)
+        with open(schema_path, "w", encoding="utf-8") as f:
+            for line in conn.iterdump():
+                f.write(f"{line}\n")
+    
+    print(f"Schema successfully written to {schema_path}")
 
-    update_schema_md()
-
-def update_schema_md():
-    # Read first 10 lines of FIPLI_DB_SCHEMA.md if it exists
-    if SCHEMA_MD_PATH.exists():
-        with open(SCHEMA_MD_PATH, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        preserved = lines[:10] if len(lines) >= 10 else lines
-    else:
-        preserved = []
-
-    # Overwrite FIPLI_DB_SCHEMA.md while keeping the first 10 lines
-    with open(SCHEMA_MD_PATH, 'w', encoding='utf-8') as f:
-        f.writelines(preserved)
-        f.write('\n-- Updated Schema Below --\n\n')
-        with open(SCHEMA_SQL_PATH, 'r', encoding='utf-8') as schema_file:
-            f.write(schema_file.read())
-
-if __name__ == '__main__':
-    generate_schema()
+if __name__ == "__main__":
+    main()
