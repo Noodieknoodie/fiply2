@@ -29,3 +29,23 @@ def validate_stepwise_periods(periods: List[Tuple[int, int]]) -> bool:
 
 def validate_age_sequence(start_age: int, retirement_age: int, final_age: int) -> bool:
     """Validates age progression follows: start_age < retirement_age < final_age."""
+
+def validate_positive_amount(amount: float, field_name: str) -> None:
+    """Validate financial amounts are positive values. Required for: assets, liabilities, scheduled inflows, scheduled outflows, retirement income, and retirement spending."""
+
+def validate_rate(rate: float, field_name: str) -> None:
+    """Validate growth rate, inflation rate, or interest rate is numeric and within valid bounds. Can be negative as per core validation rules."""
+
+def validate_stepwise_growth_config(periods: List[Tuple[int, float]], field_name: str) -> None:
+    """Validate stepwise growth periods are in chronological order and don't overlap. Required for asset-specific growth rate configurations."""
+"""
+These were moved from the prior growth_validation.py file to this file.
+"""
+def validate_growth_config_type(config_type: str) -> None:
+    """Validate growth configuration type is one of: DEFAULT, OVERRIDE, or STEPWISE."""
+
+def validate_growth_period_boundaries(periods: List[Dict], start_year: int, end_year: int) -> None:
+    """Validate growth periods fall within overall projection timeline."""
+
+def validate_growth_period_sequence(periods: List[Dict]) -> None:
+    """Validate growth periods are sequential and non-overlapping."""

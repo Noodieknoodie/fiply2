@@ -1,4 +1,4 @@
-“””
+"""
 ## Scheduled Inflows/Outflows
 - Start year, end year (stored as entered but converted as needed)
 - Amount
@@ -25,18 +25,18 @@ Key features of this implementation:
 4. Support for owner-based tracking
 5. Detailed metadata for flow analysis
 6. Utilities for analyzing flows by duration
-“””
+"""
 
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Dict, Optional
 from enum import Enum
 
-from ..models import InflowOutflow
-from ..utils.money_utils import to_decimal, apply_annual_inflation
+from ...models import InflowOutflow
+from ...utils.money_utils import to_decimal, apply_annual_inflation
 
 class FlowType(Enum):
-    """Enumeration of flow types."""
+    # Enumeration of flow types.
     INFLOW = 'inflow'
     OUTFLOW = 'outflow'
 
@@ -83,18 +83,18 @@ class CashFlowCalculator:
         inflation_rate: Decimal,
         plan_start_year: int
     ) -> CashFlowCalculationResult:
-        """
-        Calculates cash flow amount for a specific year.
+
+
+        # Calculates cash flow amount for a specific year.
         
-        Args:
-            flow: Cash flow data container
-            year: Year to calculate for
-            inflation_rate: Annual inflation rate
-            plan_start_year: Year plan started (for inflation calculations)
+        # Args:
+        #     flow: Cash flow data container
+        #     year: Year to calculate for
+        #     inflation_rate: Annual inflation rate
+        #     plan_start_year: Year plan started (for inflation calculations)
             
-        Returns:
-            Calculation results including base and adjusted amounts
-        """
+        # Returns:
+        #     Calculation results including base and adjusted amounts    
         # Determine if flow is active in this year
         is_active = self._is_flow_active(flow, year)
         
@@ -147,18 +147,18 @@ class CashFlowCalculator:
         inflation_rate: Decimal,
         plan_start_year: int
     ) -> List[CashFlowCalculationResult]:
-        """
-        Calculates amounts for multiple cash flows.
+    
+        # Calculates amounts for multiple cash flows.
         
-        Args:
-            flows: List of cash flows to calculate
-            year: Year to calculate for
-            inflation_rate: Annual inflation rate
-            plan_start_year: Year plan started
+        # Args:
+        #     flows: List of cash flows to calculate
+        #     year: Year to calculate for
+        #     inflation_rate: Annual inflation rate
+        #     plan_start_year: Year plan started
             
-        Returns:
-            List of calculation results for each flow
-        """
+        # Returns:
+        #     List of calculation results for each flow
+       
         return [
             self.calculate_flow_amount(
                 flow, year, inflation_rate, plan_start_year
@@ -170,15 +170,15 @@ class CashFlowCalculator:
         self,
         results: List[CashFlowCalculationResult]
     ) -> AggregatedFlows:
-        """
-        Aggregates inflows and outflows with inflation adjustments.
+     
+        # Aggregates inflows and outflows with inflation adjustments.
         
-        Args:
-            results: List of cash flow calculation results
+        # Args:
+        #     results: List of cash flow calculation results
             
-        Returns:
-            Aggregated totals for inflows and outflows
-        """
+        # Returns:
+        #     Aggregated totals for inflows and outflows
+      
         inflows = Decimal('0')
         outflows = Decimal('0')
         adj_inflows = Decimal('0')
@@ -253,9 +253,10 @@ class CashFlowCalculator:
         self,
         results: List[CashFlowCalculationResult]
     ) -> List[CashFlowCalculationResult]:
-        """
-        Returns list of single-year cash flows (like inheritances).
-        """
+        
+        # Returns list of single-year cash flows (like inheritances).
+        
+
         return [
             r for r in results 
             if r.metadata['is_single_year']
@@ -265,9 +266,10 @@ class CashFlowCalculator:
         self,
         results: List[CashFlowCalculationResult]
     ) -> List[CashFlowCalculationResult]:
-        """
-        Returns list of multi-year cash flows (like college expenses).
-        """
+       
+        # Returns list of multi-year cash flows (like college expenses).
+        
+
         return [
             r for r in results 
             if not r.metadata['is_single_year']
@@ -277,13 +279,14 @@ class CashFlowCalculator:
         self,
         results: List[CashFlowCalculationResult]
     ) -> Dict[FlowType, Decimal]:
-        """
-        Calculates total inflation impact by flow type.
-        """
+      
+        # Calculates total inflation impact by flow type.
+      
         impact = {
             FlowType.INFLOW: Decimal('0'),
             FlowType.OUTFLOW: Decimal('0')
         }
+
         
         for result in results:
             if result.is_active:

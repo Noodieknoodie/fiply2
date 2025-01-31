@@ -1,10 +1,11 @@
-FIPLY2/
+fiply2/
     CURSOR_LESSONS_LEARNED.md
     CURSOR_LOG.md
     FIPLI_CORE_LOGIC.md
     FIPLI_DB_SCHEMA.md
     FIPLI_FILE_HIERARCHY.md
     FIPLI_PROJECT_OVERVIEW.md
+    TODO.txt
 backend/
     requirements.txt
     database_operations/
@@ -18,17 +19,17 @@ backend/
                 assets.py
                 base_facts_calculator.py
                 cash_flows.py
+                growth_handler.py
                 liabilities.py
                 retirement_income.py
                 __init__.py
                 base_facts_utils/
-                    assets_helpers.py
-                    base_facts_calculator_helpers.py
                     cash_flows_helpers.py
                     liabilities_helpers.py
                     retirement_income_helpers.py
             scenario/
                 scenario_calculator.py
+                scenario_cloner.py
                 __init__.py
                 scenario_utils/
                     scenario_calculator_helper.py
@@ -49,11 +50,12 @@ backend/
             fiply2_database.db
             schema.sql
         tests/
+            database_tests/
+            fixtures/
+            util_tests/
         utils/
-            growth_utils.py
-            growth_validations.py
+            calculations_constants.py
             money_utils.py
-            money_validations.py
             time_utils.py
-            time_validations.py
+            validation_utils.py
             __init__.py

@@ -1,3 +1,5 @@
+### TODO COMPILATION NOT UP TO DATE ###
+
 Here's a clear conclusion of issues identified in our review:
 
 MAJOR MISSING PIECES:
@@ -9,16 +11,7 @@ MAJOR MISSING PIECES:
 
 CONCRETE TECHNICAL ISSUES:
 
-1. Growth Rate Handling Overlap
-```python
-# Currently exists in both:
-financial/growth_rates.py:
-def get_applicable_growth_rate()
-
-utils/growth_utils.py:
-def get_applicable_growth_rate()
-```
-RECOMMENDATION: Move ALL growth rate logic to `growth_utils.py` and have the CRUD operations import and use these utilities. The CRUD should only handle database operations, not calculation logic.
+1. Growth Rate Handling Overlap?
 
 2. Floating Point Usage
 ```python
@@ -70,3 +63,99 @@ TO-DO LIST (In Priority Order):
 6. Consolidate validations into ValidationService
 
 The foundation and architecture are solid, but these specific technical improvements would make the system more robust and maintainable. Would you like me to elaborate on any of these points or provide specific code examples for the recommended changes?​​​​​​​​​​​​​​​​
+
+
+
+---
+
+
+Let me analyze this from a practical AI orchestration perspective.
+
+# TODO #1: Missing Asset Growth Rate Application
+
+Action: Add
+Files affected: calculations/base_facts/base_facts_calculator.py
+Functions affected: apply_growth_rates()
+
+Issue: The growth rate application in base_facts_calculator.py is incomplete and doesn't fully implement the growth rate hierarchy
+Reason: The core logic specifies a detailed growth rate system with defaults, overrides, and stepwise handling, but current implementation doesn't handle these cases
+Evidence: From CORE_LOGIC.md:
+```
+Growth handling:  
+1. Default: Uses base assumption growth rate  
+2. Override: Asset-specific fixed rate  
+3. Stepwise: Multiple rates over time periods
+4. Gaps in stepwise fall to default
+```
+
+Unbiased 3rd Party Opinion: The current code structure is actually making this harder than it needs to be. I see a ton of validation checks and helper methods, but the core growth rate logic is spread across too many files. Consolidate this into one clear path in base_facts_calculator.py. The helpers can stay but the main logic needs to be crystal clear in one place. AIs struggle with orchestrating logic across multiple files.
+
+# TODO #2: Base Facts Cloning for Scenarios 
+
+Action: Add
+Files affected: calculations/scenario/scenario_calculator.py
+Functions affected: create_scenario()
+
+Issue: No deep cloning mechanism for creating scenarios from base facts
+Reason: Scenarios are supposed to be complete clones of base facts that can be independently modified
+Evidence: From CORE_LOGIC.md:
+```
+## Scenarios
+- Clone of base facts  
+- Inherits all base facts and base assumptions
+- Can override any base fact as well as the fact's parameters
+```
+
+Unbiased 3rd Party Opinion: The current structure is trying to be too clever with inheritance. AIs will struggle with this. Instead of trying to maintain complex object relationships, just create a flat copy of all base fact data when creating a scenario. Yes it's more data, but it's WAY easier to maintain and debug. The current approach will lead to subtle bugs that AIs won't catch.
+
+# TODO #3: Retirement Spending Application
+
+Action: Add
+Files affected: calculations/scenario/scenario_calculator.py
+Functions affected: calculate_year()
+
+Issue: No implementation of retirement spending application in annual calculation sequence
+Reason: This is a key differentiator of scenarios but is missing from the calculation flow
+Evidence: From CORE_LOGIC.md:
+```
+** IMPORTANT: No retirement spending in base facts. Scenarios introduce a separate retirement spending parameter that does not modify existing scheduled outflows. **
+```
+
+Unbiased 3rd Party Opinion: The current code is doing WAY too much validation around retirement spending amounts but not actually implementing the core spending logic. Classic AI behavior - focusing on edge cases before implementing the main functionality. Strip out half of those validations and just get the basic spending application working first.
+
+# TODO #4: Year/Age Conversion Centralization
+
+Action: Modify
+Files affected: utils/time_utils.py
+Functions affected: All time conversion functions
+
+Issue: Year/age conversions are scattered throughout calculation files
+Reason: Need centralized conversion to maintain the "single source of truth" principle
+Evidence: From CORE_LOGIC.md:
+```
+## Time Handling Principles
+- DOB is the only true date input  
+- All calculations reference absolute years internally
+- Store values as entered and convert as needed
+```
+
+Unbiased 3rd Party Opinion: The current approach of having conversion logic accessible everywhere is going to bite you. AIs will happily add new conversion methods anywhere they feel like it. Force ALL conversions through time_utils.py by making the other conversion methods private or removing them entirely. Yes this means more imports but it's worth it for consistency.
+
+# TODO #5: Inflation Adjustment Standardization
+
+Action: Add
+Files affected: utils/money_utils.py
+Functions affected: apply_annual_inflation()
+
+Issue: No standardized inflation adjustment implementation
+Reason: Multiple components need inflation adjustments but no central mechanism exists
+Evidence: From CORE_LOGIC.md:
+```
+## Value Display Principles
+- All values shown in current dollars
+- Inflation adjustments compound annually
+```
+
+Unbiased 3rd Party Opinion: The current structure begs for AIs to implement inflation adjustments differently in each component. Before implementing ANY inflation logic in the calculation files, get this utility function rock solid with tests. Make it impossible for AIs to calculate inflation any other way.
+
+These TODOs are specifically ordered to minimize AI confusion and prevent them from creating inconsistent implementations. Each one establishes a foundation that makes the next ones clearer to implement.

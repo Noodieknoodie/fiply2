@@ -1,4 +1,4 @@
-“””
+"""
 ## Assets
 - Value  
 - Optional category assignment  
@@ -21,7 +21,7 @@ This implementation:
 4. Tracks which assets are included in retirement portfolio
 5. Provides detailed calculation metadata
 6. Validates configurations and prevents overlapping periods
-“””
+"""
 
 
 from dataclasses import dataclass
@@ -29,9 +29,9 @@ from decimal import Decimal
 from typing import List, Dict, Optional
 from datetime import date
 
-from ..models import Asset, GrowthRateConfiguration
-from ..utils.money_utils import to_decimal, apply_annual_compound_rate
-from ..utils.growth_utils import get_applicable_growth_rate
+from ...models import Asset, GrowthRateConfiguration
+from ...utils.money_utils import to_decimal, apply_annual_compound_rate
+
 
 @dataclass
 class AssetFact:
