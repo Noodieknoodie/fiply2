@@ -1,0 +1,72 @@
+Here's a clear conclusion of issues identified in our review:
+
+MAJOR MISSING PIECES:
+1. The entire calculation package is still in placeholder status. This includes critical functionality for:
+   - Base facts calculations
+   - Scenario calculations
+   - All calculation helpers
+   - Portfolio value calculations
+
+CONCRETE TECHNICAL ISSUES:
+
+1. Growth Rate Handling Overlap
+```python
+# Currently exists in both:
+financial/growth_rates.py:
+def get_applicable_growth_rate()
+
+utils/growth_utils.py:
+def get_applicable_growth_rate()
+```
+RECOMMENDATION: Move ALL growth rate logic to `growth_utils.py` and have the CRUD operations import and use these utilities. The CRUD should only handle database operations, not calculation logic.
+
+2. Floating Point Usage
+```python
+# Current:
+value: Mapped[float] = mapped_column(Float, nullable=False)
+interest_rate: Mapped[float] = mapped_column(Float)
+```
+RECOMMENDATION: Use Decimal for ALL monetary values and rates in the models to prevent floating-point precision issues in financial calculations:
+```python
+from decimal import Decimal
+value: Mapped[Decimal] = mapped_column(Numeric(precision=18, scale=8), nullable=False)
+```
+
+3. Time Conversion Gap
+In `base_assumptions.py`, the year/age conversion logic isn't fully implemented according to the specification:
+```markdown
+## Time Handling Principles
+- DOB → Plan Creation Year
+- Years ↔ Age: Derived dynamically
+```
+RECOMMENDATION: Create a dedicated TimeConversionService that handles ALL conversions consistently throughout the application.
+
+4. Portfolio Value Display Logic
+Missing explicit implementation of these requirements:
+```markdown
+- All values shown in current dollars
+- No partial year calculations
+- All events at year boundaries
+```
+RECOMMENDATION: Create a dedicated PortfolioValueFormatter service to handle ALL value display formatting consistently.
+
+5. Core Validations Dispersion
+Validations are currently spread across multiple files. From the docs:
+```markdown
+## Core Validations
+1. DOB validation
+2. Timeline validation
+3. Growth period validation
+etc.
+```
+RECOMMENDATION: Consolidate ALL core validations into a single ValidationService that can be used consistently across the application.
+
+TO-DO LIST (In Priority Order):
+1. Complete the calculation package implementation
+2. Consolidate growth rate handling into utils
+3. Convert monetary values to Decimal
+4. Implement dedicated TimeConversionService
+5. Implement PortfolioValueFormatter
+6. Consolidate validations into ValidationService
+
+The foundation and architecture are solid, but these specific technical improvements would make the system more robust and maintainable. Would you like me to elaborate on any of these points or provide specific code examples for the recommended changes?​​​​​​​​​​​​​​​​
