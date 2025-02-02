@@ -1,4 +1,4 @@
-# backend/database_operations/crud/financial/liabilities.py
+# backend/database_operations/crud/financial/liabilities_crud.py
 """
 Full CRUD operations for liabilities following SQLAlchemy 2.0 style
 Simple interest rate handling (vs. complex growth rates for assets)
@@ -66,7 +66,8 @@ class LiabilityCRUD:
                 LiabilityCategory.liability_category_id == liability_category_id
             )
         )
-        if not self.session.execute(stmt).scalar_one_or_none():
+        plan = self.session.execute(stmt).scalar_one_or_none()
+        if not plan:
             raise NoResultFound(f"Plan {plan_id} or category {liability_category_id} not found")
 
         # Validate input
@@ -105,7 +106,7 @@ class LiabilityCRUD:
         Returns:
             Liability instance if found, None otherwise
         """
-        stmt = select(Liability).where(Liability.liability_id == liability_id)
+        stmt = select(Liability).join(Plan).where(Liability.liability_id == liability_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_plan_liabilities(
@@ -123,7 +124,7 @@ class LiabilityCRUD:
         Returns:
             List of Liability instances
         """
-        stmt = select(Liability).where(Liability.plan_id == plan_id)
+        stmt = select(Liability).join(Plan).where(Liability.plan_id == plan_id)
         
         if category_id:
             stmt = stmt.where(Liability.liability_category_id == category_id)
@@ -200,10 +201,12 @@ class LiabilityCRUD:
         Returns:
             Dictionary containing liability summary if found, None otherwise
         """
-        liability = self.get_liability(liability_id)
-        if not liability:
+        stmt = select(Liability, Plan.plan_creation_year).join(Plan).where(Liability.liability_id == liability_id)
+        result = self.session.execute(stmt).first()
+        if not result:
             return None
             
+        liability, plan_creation_year = result
         return {
             'liability_id': liability.liability_id,
             'liability_name': liability.liability_name,
@@ -212,7 +215,8 @@ class LiabilityCRUD:
             'owner': liability.owner,
             'interest_rate': liability.interest_rate,
             'include_in_nest_egg': liability.include_in_nest_egg,
-            'has_interest': liability.interest_rate is not None
+            'has_interest': liability.interest_rate is not None,
+            'plan_creation_year': plan_creation_year
         }
 
     def get_total_liabilities(
@@ -230,7 +234,7 @@ class LiabilityCRUD:
         Returns:
             Total value of all matching liabilities
         """
-        stmt = select(Liability).where(Liability.plan_id == plan_id)
+        stmt = select(Liability).join(Plan).where(Liability.plan_id == plan_id)
         
         if include_in_nest_egg_only:
             stmt = stmt.where(Liability.include_in_nest_egg == True)

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from ...utils.money_utils import to_decimal, apply_annual_compound_rate, round_to_currency
+from ...utils.time_utils import validate_year_not_before_plan_creation
 
 @dataclass
 class LiabilityFact:
@@ -22,6 +23,7 @@ class LiabilityFact:
     interest_rate: Optional[Decimal]
     category_id: int
     include_in_nest_egg: bool
+    plan_creation_year: Optional[int]
 
 @dataclass
 class LiabilityCalculationResult:
@@ -54,7 +56,14 @@ class LiabilityCalculator:
             
         Returns:
             Calculation result with starting and ending values
+            
+        Raises:
+            ValueError: If calculation year is before plan creation year
         """
+        # Validate year against plan creation year if set
+        if liability.plan_creation_year is not None:
+            validate_year_not_before_plan_creation(year, liability.plan_creation_year)
+            
         starting_value = liability.value
         ending_value, interest_amount = LiabilityCalculator.apply_interest(
             starting_value,
@@ -66,7 +75,8 @@ class LiabilityCalculator:
             starting_value,
             ending_value,
             liability.interest_rate,
-            year
+            year,
+            liability.plan_creation_year
         )
         
         return LiabilityCalculationResult(
@@ -206,7 +216,8 @@ class LiabilityCalculator:
         starting_value: Decimal,
         ending_value: Decimal,
         interest_rate: Optional[Decimal],
-        year: int
+        year: int,
+        plan_creation_year: Optional[int]
     ) -> Dict:
         """
         Creates metadata about liability calculation.
@@ -217,6 +228,7 @@ class LiabilityCalculator:
             ending_value: Value at end of year
             interest_rate: Optional interest rate
             year: Calculation year
+            plan_creation_year: Optional plan creation year
             
         Returns:
             Dictionary containing calculation metadata
@@ -230,7 +242,8 @@ class LiabilityCalculator:
             'interest_amount': str(interest_amount),
             'has_interest': interest_rate is not None,
             'interest_rate': str(interest_rate) if interest_rate else None,
-            'is_fixed_value': interest_rate is None
+            'is_fixed_value': interest_rate is None,
+            'plan_creation_year': plan_creation_year
         }
 
     @staticmethod
