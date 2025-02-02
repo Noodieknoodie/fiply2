@@ -31,11 +31,11 @@ from ...utils.money_utils import (
     combine_amounts,
     round_to_currency
 )
+from ...utils.time_utils import get_start_year_from_dob
 from ...validation.money_validation import validate_positive_amount, validate_rate
 from ...validation.growth_validation import (
     validate_growth_config_type,
-    validate_stepwise_periods,
-    validate_rate_bounds
+    validate_stepwise_periods
 )
 @dataclass
 class AssetFact:
@@ -64,7 +64,8 @@ class AssetCalculator:
         self,
         asset: AssetFact,
         year: int,
-        default_rate: Decimal
+        default_rate: Decimal,
+        plan_creation_year: int
     ) -> AssetCalculationResult:
         """
         Calculates asset value for a specific year applying appropriate growth.
@@ -74,10 +75,17 @@ class AssetCalculator:
             asset: Asset data container
             year: Year to calculate for
             default_rate: Default growth rate from base assumptions
+            plan_creation_year: Year when the plan was created
             
         Returns:
             Calculation results including starting/ending values and metadata
+            
+        Raises:
+            ValueError: If year is before plan creation year
         """
+        if year < plan_creation_year:
+            raise ValueError(f"Cannot calculate asset value for year {year} before plan creation year {plan_creation_year}")
+            
         starting_value = asset.value
         
         # Determine applicable growth rate
@@ -114,7 +122,8 @@ class AssetCalculator:
         self,
         assets: List[AssetFact],
         year: int,
-        default_rate: Decimal
+        default_rate: Decimal,
+        plan_creation_year: int
     ) -> List[AssetCalculationResult]:
         """
         Calculates values for multiple assets.
@@ -123,6 +132,7 @@ class AssetCalculator:
             assets: List of assets to calculate
             year: Year to calculate for
             default_rate: Default growth rate
+            plan_creation_year: Year when the plan was created
             
         Returns:
             List of calculation results for each asset
@@ -131,7 +141,12 @@ class AssetCalculator:
         self.validate_asset_facts(assets)
         
         return [
-            self.calculate_asset_value(asset, year, default_rate)
+            self.calculate_asset_value(
+                asset, 
+                year, 
+                default_rate,
+                plan_creation_year
+            )
             for asset in assets
         ]
     def aggregate_by_category(
@@ -191,8 +206,6 @@ class AssetCalculator:
         1. Stepwise rate for matching period
         2. Override rate
         3. Default rate
-        
-        All rates are validated for bounds.
         """
         # Sort configs by type priority
         stepwise_configs = [
@@ -211,17 +224,13 @@ class AssetCalculator:
                 config.end_year >= year
             ):
                 rate = to_decimal(config.growth_rate)
-                validate_rate_bounds(rate, "stepwise_growth_rate")
                 return rate
                 
         # Check for simple override
         if override_configs:
             rate = to_decimal(override_configs[0].growth_rate)
-            validate_rate_bounds(rate, "override_growth_rate")
             return rate
             
-        # Validate default rate
-        validate_rate_bounds(default_rate, "default_growth_rate")
         return default_rate
     def validate_asset_facts(self, assets: List[AssetFact]) -> None:
         """

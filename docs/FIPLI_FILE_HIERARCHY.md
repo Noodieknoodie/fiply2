@@ -8,37 +8,28 @@ backend/
         schema.sql
         __init__.py
         calculations/
+            scenario_calcs.py
             __init__.py
             base_facts/
-                assets.py
-                base_facts_calculator.py
-                cash_flows.py
-                growth_handler.py
-                liabilities.py
-                retirement_income.py
+                assets_calcs.py
+                base_facts_calcs.py
+                cash_flows_calcs.py
+                growth_handler_calcs.py
+                liabilities_calcs.py
+                retirement_income_calcs.py
                 __init__.py
-                _helpers/
-                    cash_flows.py
-                    liabilities.py
-                    retirement.py
-            scenario/
-                calculator.py
-                cloner.py
-                __init__.py
-                _helpers/
-                    calculator.py
         crud/
-            base_assumptions.py
-            households.py
-            plans.py
-            scenarios.py
+            base_assumptions_crud.py
+            households_crud.py
+            plans_crud.py
+            scenarios_crud.py
             __init__.py
             financial/
-                assets.py
-                cash_flows.py
-                growth_rates.py
-                liabilities.py
-                retirement_income.py
+                assets_crud.py
+                cash_flows_crud.py
+                growth_rates_crud.py
+                liabilities_crud.py
+                retirement_income_crud.py
                 __init__.py
         database/
             fiply2_database.db

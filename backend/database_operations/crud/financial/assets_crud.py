@@ -27,10 +27,10 @@ from ...models import Asset, AssetCategory, GrowthRateConfiguration, Plan
 from ...validation.money_validation import (
     validate_positive_amount,
     validate_rate,
-    validate_stepwise_growth_config,
     validate_owner
 )
 from ...utils.money_utils import to_decimal, to_float
+from ...validation.growth_validation import validate_stepwise_periods
 
 class AssetCRUD:
     """CRUD operations for asset and growth rate management."""
@@ -250,6 +250,13 @@ class AssetCRUD:
         Raises:
             ValueError: If validation fails
         """
+        # Get the asset's plan to check creation year
+        stmt = select(Plan).join(Asset).where(Asset.asset_id == asset_id)
+        plan = self.session.execute(stmt).scalar_one()
+        
+        if not plan.plan_creation_year:
+            raise ValueError("Plan creation year must be set before configuring growth rates")
+            
         config_type = config.get('configuration_type')
         if config_type not in ['DEFAULT', 'OVERRIDE', 'STEPWISE']:
             raise ValueError("Invalid growth configuration type")
@@ -257,7 +264,13 @@ class AssetCRUD:
         if config_type == 'STEPWISE':
             # Validate stepwise configuration
             periods = config.get('periods', [])
-            validate_stepwise_growth_config(periods, "growth_periods")
+            
+            # Validate periods don't start before plan creation
+            for period in periods:
+                if period['start_year'] < plan.plan_creation_year:
+                    raise ValueError(f"Growth period cannot start before plan creation year {plan.plan_creation_year}")
+            
+            validate_stepwise_periods(periods, "growth_periods")
             
             # Create configuration for each period
             for period in periods:
@@ -278,7 +291,7 @@ class AssetCRUD:
             growth_config = GrowthRateConfiguration(
                 asset_id=asset_id,
                 configuration_type=config_type,
-                start_year=config.get('start_year'),
+                start_year=plan.plan_creation_year,  # Default to plan creation year for non-stepwise
                 end_year=config.get('end_year'),
                 growth_rate=to_float(rate_decimal)
             )
