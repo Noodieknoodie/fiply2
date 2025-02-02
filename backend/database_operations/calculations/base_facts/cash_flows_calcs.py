@@ -1,70 +1,57 @@
 """
-## Scheduled Inflows/Outflows
-- Start year, end year (stored as entered but converted as needed)
-- Amount
-- Optional inflation toggle
-- For discrete events only
-- Input in years
-- Examples: College (start year, end year different), inheritance (start year, end year the same)
-## Annual Calculation Order
-2. Apply scheduled inflows (inflation-adjusted if enabled)
-3. Apply scheduled outflows (inflation-adjusted if enabled)
-## Value Display Principles
-- All values shown in current dollars
-- Inflation adjustments compound annually
-- No partial year or day counting
-- No cash flow timing within year
-- All events assumed to occur at year boundaries
-Key features of this implementation:
-1. Proper handling of single-year vs multi-year flows
-2. Optional inflation adjustments
-3. Clear separation of inflows and outflows
-4. Support for owner-based tracking
-5. Detailed metadata for flow analysis
-6. Utilities for analyzing flows by duration
+Handles calculations for discrete event cash flows.
+Follows core principles:
+- Annual periods only
+- No intra-year calculations
+- Optional inflation adjustment
 """
+
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from enum import Enum
 from ...models import InflowOutflow
 from ...utils.money_utils import to_decimal, apply_annual_inflation
+
 class FlowType(Enum):
-    # Enumeration of flow types.
+    """Flow type enumeration."""
     INFLOW = 'inflow'
     OUTFLOW = 'outflow'
+
 @dataclass
 class CashFlowFact:
-    """Represents scheduled inflow or outflow."""
+    """Represents a discrete event cash flow."""
     flow_id: int
     name: str
     flow_type: FlowType
     annual_amount: Decimal
     start_year: int
-    end_year: Optional[int]  # None means same as start_year
+    end_year: int  # Same as start_year for single-year events
     apply_inflation: bool
     owner: str
+
 @dataclass
 class CashFlowCalculationResult:
-    """Results container for cash flow calculations."""
+    """Results of a cash flow calculation."""
     flow_id: int
     flow_name: str
     flow_type: FlowType
     base_amount: Decimal
     adjusted_amount: Decimal
-    inflation_adjustment: Decimal
     is_active: bool
     metadata: Dict
+
 @dataclass
 class AggregatedFlows:
-    """Container for aggregated flow totals."""
     total_inflows: Decimal
     total_outflows: Decimal
     inflation_adjusted_inflows: Decimal
     inflation_adjusted_outflows: Decimal
     net_flow: Decimal
+
 class CashFlowCalculator:
-    """Handles scheduled inflow and outflow calculations."""
+    """Handles cash flow calculations."""
+    
     def calculate_flow_amount(
         self,
         flow: CashFlowFact,
@@ -72,54 +59,48 @@ class CashFlowCalculator:
         inflation_rate: Decimal,
         plan_start_year: int
     ) -> CashFlowCalculationResult:
-        # Calculates cash flow amount for a specific year.
-        # Args:
-        #     flow: Cash flow data container
-        #     year: Year to calculate for
-        #     inflation_rate: Annual inflation rate
-        #     plan_start_year: Year plan started (for inflation calculations)
-        # Returns:
-        #     Calculation results including base and adjusted amounts    
-        # Determine if flow is active in this year
+        """
+        Calculate cash flow amount for a specific year.
+        
+        Args:
+            flow: Cash flow to calculate
+            year: Year to calculate for
+            inflation_rate: Current inflation rate
+            plan_start_year: Year the plan starts
+            
+        Returns:
+            Calculation result including base and adjusted amounts
+        """
         is_active = self._is_flow_active(flow, year)
+        
         if not is_active:
             return CashFlowCalculationResult(
                 flow_id=flow.flow_id,
                 flow_name=flow.name,
                 flow_type=flow.flow_type,
-                base_amount=flow.annual_amount,
+                base_amount=Decimal('0'),
                 adjusted_amount=Decimal('0'),
-                inflation_adjustment=Decimal('0'),
                 is_active=False,
-                metadata=self._generate_calculation_metadata(
-                    flow, year, Decimal('0')
-                )
+                metadata=self._generate_metadata(flow, year)
             )
-        # Start with base amount
+
         base_amount = flow.annual_amount
         adjusted_amount = base_amount
-        inflation_adjustment = Decimal('0')
-        # Apply inflation if enabled
+
         if flow.apply_inflation:
             years_from_start = year - plan_start_year
-            adjusted_amount = apply_annual_inflation(
-                base_amount,
-                inflation_rate,
-                years_from_start
-            )
-            inflation_adjustment = adjusted_amount - base_amount
+            adjusted_amount = apply_annual_inflation(base_amount, inflation_rate)
+
         return CashFlowCalculationResult(
             flow_id=flow.flow_id,
             flow_name=flow.name,
             flow_type=flow.flow_type,
             base_amount=base_amount,
             adjusted_amount=adjusted_amount,
-            inflation_adjustment=inflation_adjustment,
             is_active=True,
-            metadata=self._generate_calculation_metadata(
-                flow, year, inflation_adjustment
-            )
+            metadata=self._generate_metadata(flow, year)
         )
+
     def calculate_multiple_flows(
         self,
         flows: List[CashFlowFact],
@@ -127,29 +108,15 @@ class CashFlowCalculator:
         inflation_rate: Decimal,
         plan_start_year: int
     ) -> List[CashFlowCalculationResult]:
-        # Calculates amounts for multiple cash flows.
-        # Args:
-        #     flows: List of cash flows to calculate
-        #     year: Year to calculate for
-        #     inflation_rate: Annual inflation rate
-        #     plan_start_year: Year plan started
-        # Returns:
-        #     List of calculation results for each flow
         return [
-            self.calculate_flow_amount(
-                flow, year, inflation_rate, plan_start_year
-            )
+            self.calculate_flow_amount(flow, year, inflation_rate, plan_start_year)
             for flow in flows
         ]
+
     def aggregate_flows(
         self,
         results: List[CashFlowCalculationResult]
     ) -> AggregatedFlows:
-        # Aggregates inflows and outflows with inflation adjustments.
-        # Args:
-        #     results: List of cash flow calculation results
-        # Returns:
-        #     Aggregated totals for inflows and outflows
         inflows = Decimal('0')
         outflows = Decimal('0')
         adj_inflows = Decimal('0')
@@ -170,76 +137,77 @@ class CashFlowCalculator:
             inflation_adjusted_outflows=adj_outflows,
             net_flow=adj_inflows - adj_outflows
         )
-    def _is_flow_active(
-        self,
-        flow: CashFlowFact,
-        year: int
-    ) -> bool:
-        """Determines if flow is active in the given year."""
-        end_year = flow.end_year or flow.start_year
-        return flow.start_year <= year <= end_year
-    def _generate_calculation_metadata(
-        self,
-        flow: CashFlowFact,
-        year: int,
-        inflation_adjustment: Decimal
-    ) -> Dict:
-        """Creates metadata about calculation process."""
+
+    def _is_flow_active(self, flow: CashFlowFact, year: int) -> bool:
+        """Check if flow is active in given year."""
+        return flow.start_year <= year <= flow.end_year
+
+    def _generate_metadata(self, flow: CashFlowFact, year: int) -> Dict:
+        """Generate metadata for calculation result."""
         return {
             'flow_name': flow.name,
             'flow_type': flow.flow_type.value,
             'owner': flow.owner,
             'year': year,
-            'inflation_enabled': flow.apply_inflation,
-            'inflation_adjustment': str(inflation_adjustment),
-            'is_single_year': flow.end_year is None or flow.end_year == flow.start_year,
-            'years_active': (flow.end_year or flow.start_year) - flow.start_year + 1
+            'is_single_year': flow.start_year == flow.end_year
         }
+
     def validate_cash_flows(
         self,
         flows: List[CashFlowFact]
     ) -> None:
-        """Validates cash flow inputs before calculations."""
         for flow in flows:
-            # Validate amount is positive
             if flow.annual_amount <= 0:
                 raise ValueError(
                     f"Cash flow {flow.flow_id} has invalid amount"
                 )
-            # Validate year sequence
-            if flow.end_year is not None:
-                if flow.start_year > flow.end_year:
-                    raise ValueError(
-                        f"Cash flow {flow.flow_id} has invalid year sequence"
-                    )
-    def get_single_year_flows(
+            if flow.end_year is not None and flow.start_year > flow.end_year:
+                raise ValueError(
+                    f"Cash flow {flow.flow_id} has invalid year sequence"
+                )
+
+    def calculate_total_flow_amount(
         self,
-        results: List[CashFlowCalculationResult]
-    ) -> List[CashFlowCalculationResult]:
-        # Returns list of single-year cash flows (like inheritances).
-        return [
-            r for r in results 
-            if r.metadata['is_single_year']
-        ]
-    def get_multi_year_flows(
-        self,
-        results: List[CashFlowCalculationResult]
-    ) -> List[CashFlowCalculationResult]:
-        # Returns list of multi-year cash flows (like college expenses).
-        return [
-            r for r in results 
-            if not r.metadata['is_single_year']
-        ]
+        annual_amount: Decimal,
+        start_year: int,
+        end_year: Optional[int],
+        inflation_rate: Optional[Decimal] = None,
+        apply_inflation: bool = False
+    ) -> Decimal:
+        actual_end = end_year or start_year
+        duration = actual_end - start_year + 1
+        if not apply_inflation or not inflation_rate:
+            return annual_amount * duration
+        total = Decimal('0')
+        for year in range(duration):
+            adjusted = apply_annual_inflation(
+                annual_amount,
+                inflation_rate,
+                year
+            )
+            total += adjusted
+        return total
+
     def calculate_total_inflation_impact(
         self,
         results: List[CashFlowCalculationResult]
     ) -> Dict[FlowType, Decimal]:
-        # Calculates total inflation impact by flow type.
         impact = {
             FlowType.INFLOW: Decimal('0'),
             FlowType.OUTFLOW: Decimal('0')
         }
         for result in results:
             if result.is_active:
-                impact[result.flow_type] += result.inflation_adjustment
+                impact[result.flow_type] += result.adjusted_amount - result.base_amount
         return impact
+
+    def categorize_flows(
+        self,
+        flows: List[Tuple[FlowType, Decimal, str]]
+    ) -> Dict[str, List[Tuple[FlowType, Decimal]]]:
+        categories = {}
+        for flow_type, amount, category in flows:
+            if category not in categories:
+                categories[category] = []
+            categories[category].append((flow_type, amount))
+        return categories
