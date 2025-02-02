@@ -1,3 +1,5 @@
+# FIPLI_FILE_HIERARCHY.md
+
 FIPLY2/
     stripcomments.py
 backend/

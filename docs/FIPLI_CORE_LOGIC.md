@@ -1,4 +1,4 @@
-.cursor/rules/CORE_LOGIC.md
+# FIPLI_CORE_LOGIC.md
 
 # This document contains specific details about the core data model and calculation logic of the FIPLI project.
 
@@ -95,6 +95,9 @@
 - Dynamic updates on changes  
 
 ---
+!!! THE ONLY VALIDATIONS ARE ONES THAT PREVENT IMPOSSIBILITIES NOT REASONABLENESS !!!
+
+
 
 # Single Source of Truth
 

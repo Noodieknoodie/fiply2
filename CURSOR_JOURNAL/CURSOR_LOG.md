@@ -4,3 +4,6 @@
 > wrote the functions in backend/database_operations/utils/time_utils.py and backend/database_operations/utils/money_utils.py to handle precision and rounding of financial data.
 > created backend/database_operations/validation folder. created growth_validation.py, money_validation.py, time_validation.py, scenario_time_validation.py
 
+> did a full run through of all things ASSET
+> did a full run through of all things LIABILITY 
+

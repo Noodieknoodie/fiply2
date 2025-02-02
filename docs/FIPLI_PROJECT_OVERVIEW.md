@@ -1,4 +1,4 @@
-.cursor/rules/PROJECT_OVERVIEW.md
+# FIPLI_PROJECT_OVERVIEW.md
 
 # This document is a high-level overview of the FIPLI project
 

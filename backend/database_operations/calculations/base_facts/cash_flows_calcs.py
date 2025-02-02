@@ -201,13 +201,3 @@ class CashFlowCalculator:
                 impact[result.flow_type] += result.adjusted_amount - result.base_amount
         return impact
 
-    def categorize_flows(
-        self,
-        flows: List[Tuple[FlowType, Decimal, str]]
-    ) -> Dict[str, List[Tuple[FlowType, Decimal]]]:
-        categories = {}
-        for flow_type, amount, category in flows:
-            if category not in categories:
-                categories[category] = []
-            categories[category].append((flow_type, amount))
-        return categories

@@ -1,6 +1,8 @@
 from typing import List, Tuple, Dict, Any
 from decimal import Decimal
 
+# CONTAINS STUB FUNCTIONS FOR LATER ON DONT DELETE
+
 def validate_stepwise_periods(periods: List[Dict[str, Any]], field_name: str) -> None:
     """
     Validate stepwise growth periods don't overlap and are chronologically ordered.
@@ -32,8 +34,6 @@ def validate_stepwise_periods(periods: List[Dict[str, Any]], field_name: str) ->
             if current['end_year'] >= next_period['start_year']:
                 raise ValueError(f"{field_name} contains overlapping periods")
 
-def validate_stepwise_growth_config(periods: List[Tuple[int, float]], field_name: str) -> None:
-    """Validate stepwise growth periods are in chronological order and don't overlap. Required for asset-specific growth rate configurations."""
 
 def validate_growth_config_type(config_type: str, field_name: str) -> None:
     """Validate growth configuration type is one of the allowed values."""
@@ -47,19 +47,3 @@ def validate_growth_period_boundaries(periods: List[Dict], start_year: int, end_
 def validate_growth_period_sequence(periods: List[Dict]) -> None:
     """Validate growth periods are sequential and non-overlapping."""
 
-def validate_rate_bounds(rate: Decimal, field_name: str) -> None:
-    """
-    Validate growth rate is within reasonable bounds.
-    Note: Can be negative as per core validation rules.
-    
-    Args:
-        rate: Growth rate as decimal
-        field_name: Name of field for error messages
-        
-    Raises:
-        ValueError: If rate is outside reasonable bounds
-    """
-    # Allow negative rates but prevent unreasonable values
-    # These bounds are generous but prevent obvious errors
-    if rate < Decimal('-1') or rate > Decimal('1'):
-        raise ValueError(f"{field_name} must be between -100% and 100%")

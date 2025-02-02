@@ -35,15 +35,17 @@ from decimal import Decimal
 from typing import List, Dict, Optional, Tuple
 from copy import deepcopy
 
-from ...models import Scenario, ScenarioAssumption, ScenarioOverride
-from ..base_facts.base_facts_calcs import (
+from ..models import Scenario, ScenarioAssumption, ScenarioOverride
+from .base_facts.base_facts_calcs import (
     BaseFacts,
     YearlyCalculationResult,
     PortfolioValues,
     CashFlowResults,
     IncomeResults
+
 )
-from ...utils.money_utils import to_decimal, apply_annual_inflation
+from ..utils.money_utils import to_decimal, apply_annual_inflation
+
 
 
 @dataclass

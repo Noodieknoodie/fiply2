@@ -1,0 +1,6 @@
+---
+description: how to validate
+globs: **/*.py
+---
+
+!!! THE ONLY VALIDATIONS ARE ONES THAT PREVENT IMPOSSIBILITIES NOT REASONABLENESS !!!

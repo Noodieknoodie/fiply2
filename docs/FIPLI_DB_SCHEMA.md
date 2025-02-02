@@ -1,4 +1,5 @@
-backend\database_operations\database\fiply2_database.db
+# FIPLI_DB_SCHEMA.md
+
 
 # This document contains the schema preview for the FIPLI database.
 
