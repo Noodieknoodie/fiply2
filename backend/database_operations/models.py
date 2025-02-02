@@ -35,6 +35,8 @@ class Plan(Base):
     plan_name: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    reference_person: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    plan_creation_year: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Relationships
     household: Mapped["Household"] = relationship("Household", back_populates="plans")

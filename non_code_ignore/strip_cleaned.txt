@@ -1,0 +1,3450 @@
+__init__.py
+py
+calculations\__init__.py
+py
+calculations\base_facts\assets.py
+py
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Dict, Optional
+from datetime import date
+from ...models import Asset, GrowthRateConfiguration
+from ...utils.money_utils import to_decimal, apply_annual_compound_rate
+@dataclass
+class AssetFact:
+    asset_id: int
+    value: Decimal
+    category_id: int
+    include_in_nest_egg: bool
+    growth_configs: List[GrowthRateConfiguration]
+    owner: str
+    name: str
+@dataclass
+class AssetCalculationResult:
+    asset_id: int
+    starting_value: Decimal
+    ending_value: Decimal
+    applied_growth_rate: Decimal
+    category_id: int
+    growth_amount: Decimal
+    included_in_nest_egg: bool
+    metadata: Dict
+class AssetCalculator:
+    def calculate_asset_value(
+        self,
+        asset: AssetFact,
+        year: int,
+        default_rate: Decimal
+    ) -> AssetCalculationResult:
+        starting_value = asset.value
+        growth_rate = self._get_applicable_growth_rate(
+            asset.growth_configs,
+            year,
+            default_rate
+        )
+        ending_value = apply_annual_compound_rate(
+            starting_value,
+            growth_rate
+        )
+        growth_amount = ending_value - starting_value
+        return AssetCalculationResult(
+            asset_id=asset.asset_id,
+            starting_value=starting_value,
+            ending_value=ending_value,
+            applied_growth_rate=growth_rate,
+            category_id=asset.category_id,
+            growth_amount=growth_amount,
+            included_in_nest_egg=asset.include_in_nest_egg,
+            metadata=self._generate_calculation_metadata(
+                asset,
+                year,
+                growth_rate,
+                growth_amount
+            )
+        )
+    def calculate_multiple_assets(
+        self,
+        assets: List[AssetFact],
+        year: int,
+        default_rate: Decimal
+    ) -> List[AssetCalculationResult]:
+        return [
+            self.calculate_asset_value(asset, year, default_rate)
+            for asset in assets
+        ]
+    def aggregate_by_category(
+        self,
+        results: List[AssetCalculationResult]
+    ) -> Dict[int, Decimal]:
+        totals = {}
+        for result in results:
+            cat_id = result.category_id
+            if cat_id not in totals:
+                totals[cat_id] = Decimal('0')
+            totals[cat_id] += result.ending_value
+        return totals
+    def calculate_nest_egg_value(
+        self,
+        results: List[AssetCalculationResult]
+    ) -> Decimal:
+        return sum(
+            r.ending_value 
+            for r in results 
+            if r.included_in_nest_egg
+        )
+    def _get_applicable_growth_rate(
+        self,
+        growth_configs: List[GrowthRateConfiguration],
+        year: int,
+        default_rate: Decimal
+    ) -> Decimal:
+        stepwise_configs = [
+            c for c in growth_configs 
+            if c.configuration_type == 'STEPWISE'
+        ]
+        override_configs = [
+            c for c in growth_configs 
+            if c.configuration_type == 'OVERRIDE'
+        ]
+        for config in stepwise_configs:
+            if config.start_year <= year and (
+                config.end_year is None or 
+                config.end_year >= year
+            ):
+                return to_decimal(config.growth_rate)
+        if override_configs:
+            return to_decimal(override_configs[0].growth_rate)
+        return default_rate
+    def _generate_calculation_metadata(
+        self,
+        asset: AssetFact,
+        year: int,
+        applied_rate: Decimal,
+        growth_amount: Decimal
+    ) -> Dict:
+        return {
+            'asset_name': asset.name,
+            'owner': asset.owner,
+            'year': year,
+            'applied_growth_rate': str(applied_rate),
+            'growth_amount': str(growth_amount),
+            'rate_type': self._determine_rate_type(asset.growth_configs, year)
+        }
+    def _determine_rate_type(
+        self,
+        growth_configs: List[GrowthRateConfiguration],
+        year: int
+    ) -> str:
+        for config in growth_configs:
+            if config.configuration_type == 'STEPWISE':
+                if config.start_year <= year and (
+                    config.end_year is None or 
+                    config.end_year >= year
+                ):
+                    return 'STEPWISE'
+            elif config.configuration_type == 'OVERRIDE':
+                return 'OVERRIDE'
+        return 'DEFAULT'
+    def validate_asset_facts(self, assets: List[AssetFact]) -> None:
+        for asset in assets:
+            if asset.value < 0:
+                raise ValueError(
+                    f"Asset {asset.asset_id} has negative value"
+                )
+            stepwise_periods = [
+                (c.start_year, c.end_year)
+                for c in asset.growth_configs
+                if c.configuration_type == 'STEPWISE'
+            ]
+            for i, (start1, end1) in enumerate(stepwise_periods):
+                for start2, end2 in stepwise_periods[i+1:]:
+                    if end1 is None or end2 is None:
+                        continue
+                    if not (end1 < start2 or end2 < start1):
+                        raise ValueError(
+                            f"Asset {asset.asset_id} has overlapping growth periods"
+                        )
+calculations\base_facts\base_facts_calculator.py
+py
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Optional, Dict
+from datetime import date
+from ...models import Asset, Liability, InflowOutflow, RetirementIncomePlan, BaseAssumption
+from ...utils.money_utils import (
+    to_decimal, 
+    apply_annual_compound_rate,
+    apply_annual_inflation
+)
+from .growth_handler import GrowthRateHandler
+@dataclass
+class BaseFacts:
+    assets: List[Asset]
+    liabilities: List[Liability]
+    inflows_outflows: List[InflowOutflow]
+    retirement_income: List[RetirementIncomePlan]
+    base_assumptions: BaseAssumption
+    start_year: int
+    retirement_year: int
+    end_year: int
+@dataclass
+class PortfolioValues:
+    asset_values: Dict[int, Decimal]  # asset_id -> value
+    liability_values: Dict[int, Decimal]  # liability_id -> value
+    asset_category_totals: Dict[str, Decimal]  # category -> total
+    liability_category_totals: Dict[str, Decimal]  # category -> total
+    retirement_portfolio_value: Decimal
+    total_net_worth: Decimal
+@dataclass
+class CashFlowResults:
+    inflows: Dict[int, Decimal]  # flow_id -> adjusted_amount
+    outflows: Dict[int, Decimal]  # flow_id -> adjusted_amount
+    net_inflows: Decimal
+    net_outflows: Decimal
+    total_net_flow: Decimal
+@dataclass
+class IncomeResults:
+    income_streams: Dict[int, Decimal]  # income_id -> adjusted_amount
+    total_income: Decimal
+@dataclass
+class YearlyCalculationResult:
+    year: int
+    starting_portfolio: PortfolioValues
+    cash_flows: CashFlowResults
+    income: IncomeResults
+    ending_portfolio: PortfolioValues
+    metadata: Dict  # For debugging/validation
+class BaseFactsCalculator:
+    def __init__(self):
+        self.growth_handler = GrowthRateHandler()
+    def calculate_year(
+        self, 
+        year: int, 
+        base_facts: BaseFacts,
+        prior_result: Optional[YearlyCalculationResult]
+    ) -> YearlyCalculationResult:
+        if prior_result:
+            starting_portfolio = self._carry_forward_values(prior_result)
+        else:
+            starting_portfolio = self._initialize_starting_values(base_facts)
+        cash_flows = self.process_cash_flows(year, base_facts)
+        income = self.process_retirement_income(year, base_facts)
+        interim_portfolio = self._apply_flows_to_portfolio(
+            starting_portfolio,
+            cash_flows,
+            income,
+            base_facts
+        )
+        grown_portfolio = self._apply_all_growth(
+            interim_portfolio,
+            year,
+            base_facts
+        )
+        final_portfolio = self.apply_liability_interest(
+            grown_portfolio,
+            base_facts
+        )
+        final_portfolio = self._update_portfolio_totals(final_portfolio, base_facts)
+        return YearlyCalculationResult(
+            year=year,
+            starting_portfolio=starting_portfolio,
+            cash_flows=cash_flows,
+            income=income,
+            ending_portfolio=final_portfolio,
+            metadata=self._generate_calculation_metadata(
+                year, 
+                final_portfolio,
+                cash_flows
+            )
+        )
+    def _apply_all_growth(
+        self,
+        portfolio: PortfolioValues,
+        year: int,
+        base_facts: BaseFacts
+    ) -> PortfolioValues:
+        new_values = portfolio.asset_values.copy()
+        for asset_id, value in portfolio.asset_values.items():
+            asset = next(a for a in base_facts.assets if a.asset_id == asset_id)
+            growth_result = self.growth_handler.apply_growth(
+                value,
+                asset_id,
+                year,
+                to_decimal(base_facts.base_assumptions.default_growth_rate),
+                asset.growth_rates
+            )
+            new_values[asset_id] = growth_result.final_value
+        portfolio.asset_values = new_values
+        return self._update_portfolio_totals(portfolio, base_facts)
+    def apply_liability_interest(
+        self,
+        portfolio: PortfolioValues,
+        base_facts: BaseFacts
+    ) -> PortfolioValues:
+        new_values = portfolio.liability_values.copy()
+        for liability_id, value in portfolio.liability_values.items():
+            liability = next(
+                l for l in base_facts.liabilities 
+                if l.liability_id == liability_id
+            )
+            if liability.interest_rate:
+                rate = to_decimal(liability.interest_rate)
+                new_values[liability_id] = apply_annual_compound_rate(value, rate)
+        portfolio.liability_values = new_values
+        return self._update_portfolio_totals(portfolio, base_facts)
+    def _update_portfolio_totals(self, portfolio: PortfolioValues, base_facts: BaseFacts) -> PortfolioValues:
+        portfolio.total_net_worth = (
+            sum(portfolio.asset_values.values()) -
+            sum(portfolio.liability_values.values())
+        )
+        portfolio.retirement_portfolio_value = sum(
+            value for asset_id, value in portfolio.asset_values.items()
+            if next(a for a in base_facts.assets if a.asset_id == asset_id).include_in_nest_egg
+        )
+        portfolio.asset_category_totals = {}
+        for asset in base_facts.assets:
+            if asset.asset_category_id not in portfolio.asset_category_totals:
+                portfolio.asset_category_totals[asset.asset_category_id] = Decimal('0')
+            portfolio.asset_category_totals[asset.asset_category_id] += portfolio.asset_values[asset.asset_id]
+        portfolio.liability_category_totals = {}
+        for liability in base_facts.liabilities:
+            if liability.liability_category_id not in portfolio.liability_category_totals:
+                portfolio.liability_category_totals[liability.liability_category_id] = Decimal('0')
+            portfolio.liability_category_totals[liability.liability_category_id] += portfolio.liability_values[liability.liability_id]
+        return portfolio
+    def process_cash_flows(self, year: int, base_facts: BaseFacts) -> CashFlowResults:
+        inflows = {}
+        outflows = {}
+        for flow in base_facts.inflows_outflows:
+            if not (flow.start_year <= year <= (flow.end_year or flow.start_year)):
+                continue
+            amount = to_decimal(flow.annual_amount)
+            if flow.apply_inflation:
+                years_from_start = year - base_facts.start_year
+                amount = apply_annual_inflation(
+                    amount,
+                    to_decimal(base_facts.base_assumptions.inflation_rate),
+                    years_from_start
+                )
+            if flow.type == 'inflow':
+                inflows[flow.inflow_outflow_id] = amount
+            else:
+                outflows[flow.inflow_outflow_id] = amount
+        net_inflows = sum(inflows.values())
+        net_outflows = sum(outflows.values())
+        return CashFlowResults(
+            inflows=inflows,
+            outflows=outflows,
+            net_inflows=net_inflows,
+            net_outflows=net_outflows,
+            total_net_flow=net_inflows - net_outflows
+        )
+    def process_retirement_income(
+        self,
+        year: int,
+        base_facts: BaseFacts
+    ) -> IncomeResults:
+        income_streams = {}
+        if year < base_facts.retirement_year:
+            return IncomeResults(
+                income_streams={},
+                total_income=Decimal('0')
+            )
+        for income in base_facts.retirement_income:
+            if not self._is_income_active(income, year):
+                continue
+            amount = to_decimal(income.annual_income)
+            if income.apply_inflation:
+                years_from_start = year - base_facts.start_year
+                amount = apply_annual_inflation(
+                    amount,
+                    to_decimal(base_facts.base_assumptions.inflation_rate),
+                    years_from_start
+                )
+            income_streams[income.income_plan_id] = amount
+        return IncomeResults(
+            income_streams=income_streams,
+            total_income=sum(income_streams.values())
+        )
+    def generate_projection(
+        self,
+        base_facts: BaseFacts
+    ) -> List[YearlyCalculationResult]:
+        self.validate_inputs(base_facts)
+        results = []
+        prior_result = None
+        for year in range(base_facts.start_year, base_facts.end_year + 1):
+            result = self.calculate_year(year, base_facts, prior_result)
+            results.append(result)
+            prior_result = result
+        return results
+    def validate_inputs(self, base_facts: BaseFacts) -> None:
+        if not base_facts.assets and not base_facts.liabilities:
+            raise ValueError("Must have at least one asset or liability")
+        if base_facts.start_year >= base_facts.retirement_year:
+            raise ValueError("Start year must be before retirement year")
+        if base_facts.retirement_year >= base_facts.end_year:
+            raise ValueError("Retirement year must be before end year")
+        for asset in base_facts.assets:
+            if asset.value <= 0:
+                raise ValueError(f"Asset {asset.asset_id} has invalid value")
+        for liability in base_facts.liabilities:
+            if liability.value <= 0:
+                raise ValueError(f"Liability {liability.liability_id} has invalid value")
+    def _carry_forward_values(
+        self,
+        prior_result: YearlyCalculationResult
+    ) -> PortfolioValues:
+        return PortfolioValues(
+            asset_values=prior_result.ending_portfolio.asset_values.copy(),
+            liability_values=prior_result.ending_portfolio.liability_values.copy(),
+            asset_category_totals=prior_result.ending_portfolio.asset_category_totals.copy(),
+            liability_category_totals=prior_result.ending_portfolio.liability_category_totals.copy(),
+            retirement_portfolio_value=prior_result.ending_portfolio.retirement_portfolio_value,
+            total_net_worth=prior_result.ending_portfolio.total_net_worth
+        )
+    def _initialize_starting_values(self, base_facts: BaseFacts) -> PortfolioValues:
+        asset_values = {
+            asset.asset_id: to_decimal(asset.value)
+            for asset in base_facts.assets
+        }
+        liability_values = {
+            liability.liability_id: to_decimal(liability.value)
+            for liability in base_facts.liabilities
+        }
+        portfolio = PortfolioValues(
+            asset_values=asset_values,
+            liability_values=liability_values,
+            asset_category_totals={},
+            liability_category_totals={},
+            retirement_portfolio_value=Decimal('0'),
+            total_net_worth=Decimal('0')
+        )
+        return self._update_portfolio_totals(portfolio, base_facts)
+    def _apply_flows_to_portfolio(
+        self,
+        portfolio: PortfolioValues,
+        cash_flows: CashFlowResults,
+        income: IncomeResults,
+        base_facts: BaseFacts
+    ) -> PortfolioValues:
+        nest_egg_inflows = sum(
+            amount for flow_id, amount in cash_flows.inflows.items()
+            if next(f for f in base_facts.inflows_outflows 
+                if f.inflow_outflow_id == flow_id).include_in_nest_egg
+        )
+        nest_egg_outflows = sum(
+            amount for flow_id, amount in cash_flows.outflows.items()
+            if next(f for f in base_facts.inflows_outflows 
+                if f.inflow_outflow_id == flow_id).include_in_nest_egg
+        )
+        nest_egg_net_flow = nest_egg_inflows - nest_egg_outflows
+        portfolio.retirement_portfolio_value += nest_egg_net_flow + income.total_income
+        return self._update_portfolio_totals(portfolio, base_facts)
+    def _is_income_active(
+        self,
+        income: RetirementIncomePlan,
+        year: int
+    ) -> bool:
+        return income.start_year <= year <= (income.end_year or income.start_year)
+    def _generate_calculation_metadata(
+        self,
+        year: int,
+        portfolio: PortfolioValues,
+        flows: CashFlowResults
+    ) -> Dict:
+        return {
+            'year': year,
+            'total_inflows': flows.net_inflows,
+            'total_outflows': flows.net_outflows,
+            'ending_portfolio_value': portfolio.retirement_portfolio_value
+        }
+calculations\base_facts\base_facts_utils\cash_flows_helpers.py
+py
+from decimal import Decimal
+from typing import List, Dict, Optional, Tuple
+from enum import Enum
+from ....utils.money_utils import to_decimal, apply_annual_inflation
+class FlowType(Enum):
+    INFLOW = 'inflow'
+    OUTFLOW = 'outflow'
+class CashFlowCalculationHelpers:
+    @staticmethod
+    def is_flow_active(
+        flow_start_year: int,
+        flow_end_year: Optional[int],
+        current_year: int
+    ) -> Tuple[bool, str]:
+        actual_end = flow_end_year or flow_start_year
+        if current_year < flow_start_year:
+            return False, "before_start"
+        if current_year > actual_end:
+            return False, "after_end"
+        return True, "active"
+    @staticmethod
+    def apply_inflation_adjustment(
+        amount: Decimal,
+        inflation_rate: Decimal,
+        years_from_start: int,
+        apply_inflation: bool
+    ) -> Tuple[Decimal, Decimal]:
+        if not apply_inflation or years_from_start == 0:
+            return amount, Decimal('0')
+        adjusted = apply_annual_inflation(
+            amount,
+            inflation_rate,
+            years_from_start
+        )
+        return adjusted, (adjusted - amount)
+    @staticmethod
+    def validate_year_boundaries(
+        start_year: int,
+        end_year: Optional[int],
+        plan_start_year: int,
+        plan_end_year: int
+    ) -> None:
+        if start_year < plan_start_year:
+            raise ValueError(
+                f"Flow start year {start_year} before plan start year {plan_start_year}"
+            )
+        actual_end = end_year or start_year
+        if actual_end > plan_end_year:
+            raise ValueError(
+                f"Flow end year {actual_end} after plan end year {plan_end_year}"
+            )
+        if end_year and start_year > end_year:
+            raise ValueError(
+                f"Flow start year {start_year} after end year {end_year}"
+            )
+    @staticmethod
+    def generate_flow_metadata(
+        flow_id: int,
+        flow_type: FlowType,
+        base_amount: Decimal,
+        adjusted_amount: Decimal,
+        year: int,
+        is_active: bool,
+        inflation_applied: bool
+    ) -> Dict:
+        return {
+            'flow_id': flow_id,
+            'flow_type': flow_type.value,
+            'year': year,
+            'base_amount': str(base_amount),
+            'adjusted_amount': str(adjusted_amount),
+            'inflation_impact': str(adjusted_amount - base_amount),
+            'is_active': is_active,
+            'inflation_applied': inflation_applied
+        }
+    @staticmethod
+    def calculate_type_totals(
+        flows: List[Tuple[FlowType, Decimal, bool]]
+    ) -> Dict[FlowType, Decimal]:
+        totals = {
+            FlowType.INFLOW: Decimal('0'),
+            FlowType.OUTFLOW: Decimal('0')
+        }
+        for flow_type, amount, is_active in flows:
+            if is_active:
+                totals[flow_type] += amount
+        return totals
+    @staticmethod
+    def detect_flow_patterns(
+        start_year: int,
+        end_year: Optional[int]
+    ) -> Dict[str, bool]:
+        actual_end = end_year or start_year
+        duration = actual_end - start_year + 1
+        return {
+            'is_single_year': duration == 1,
+            'is_multi_year': duration > 1,
+            'has_end_date': end_year is not None
+        }
+    @staticmethod
+    def calculate_total_flow_amount(
+        annual_amount: Decimal,
+        start_year: int,
+        end_year: Optional[int],
+        inflation_rate: Optional[Decimal] = None,
+        apply_inflation: bool = False
+    ) -> Decimal:
+        actual_end = end_year or start_year
+        duration = actual_end - start_year + 1
+        if not apply_inflation or not inflation_rate:
+            return annual_amount * duration
+        total = Decimal('0')
+        for year in range(duration):
+            adjusted = apply_annual_inflation(
+                annual_amount,
+                inflation_rate,
+                year
+            )
+            total += adjusted
+        return total
+    @staticmethod
+    def validate_flow_amount(
+        amount: Decimal,
+        flow_type: FlowType
+    ) -> None:
+        if amount <= 0:
+            raise ValueError(
+                f"{flow_type.value.capitalize()} amount must be positive"
+            )
+    @staticmethod
+    def categorize_flows(
+        flows: List[Tuple[FlowType, Decimal, str]]
+    ) -> Dict[str, List[Tuple[FlowType, Decimal]]]:
+        categories = {}
+        for flow_type, amount, category in flows:
+            if category not in categories:
+                categories[category] = []
+            categories[category].append((flow_type, amount))
+        return categories
+calculations\base_facts\base_facts_utils\liabilities_helpers.py
+py
+from decimal import Decimal
+from typing import List, Dict, Optional, Tuple
+from datetime import date
+from ....utils.money_utils import to_decimal, apply_annual_compound_rate
+class LiabilityCalculationHelpers:
+    @staticmethod
+    def apply_interest(
+        value: Decimal,
+        rate: Optional[Decimal]
+    ) -> Tuple[Decimal, Decimal]:
+        if rate is None:
+            return value, Decimal('0')
+        ending_value = apply_annual_compound_rate(value, rate)
+        interest_amount = ending_value - value
+        return ending_value, interest_amount
+    @staticmethod
+    def is_interest_applicable(
+        interest_rate: Optional[Decimal],
+        liability_id: int
+    ) -> Tuple[bool, str]:
+        if interest_rate is None:
+            return False, "no_rate_specified"
+        if interest_rate == 0:
+            return False, "zero_rate"
+        return True, "rate_applicable"
+    @staticmethod
+    def validate_interest_rate(
+        rate: Optional[Decimal]
+    ) -> None:
+        if rate is not None and rate < 0:
+            raise ValueError("Interest rate cannot be negative")
+    @staticmethod
+    def calculate_category_totals(
+        results: List[Tuple[int, Decimal, int]]
+    ) -> Dict[int, Decimal]:
+        totals = {}
+        for _, value, category_id in results:
+            if category_id not in totals:
+                totals[category_id] = Decimal('0')
+            totals[category_id] += value
+        return totals
+    @staticmethod
+    def generate_calculation_metadata(
+        liability_id: int,
+        starting_value: Decimal,
+        ending_value: Decimal,
+        interest_rate: Optional[Decimal],
+        year: int
+    ) -> Dict:
+        interest_amount = ending_value - starting_value
+        return {
+            'liability_id': liability_id,
+            'year': year,
+            'starting_value': str(starting_value),
+            'ending_value': str(ending_value),
+            'interest_amount': str(interest_amount),
+            'has_interest': interest_rate is not None,
+            'interest_rate': str(interest_rate) if interest_rate else None,
+            'is_fixed_value': interest_rate is None
+        }
+    @staticmethod
+    def calculate_total_interest(
+        results: List[Tuple[Decimal, Decimal]]
+    ) -> Decimal:
+        return sum(
+            ending - starting
+            for starting, ending in results
+        )
+    @staticmethod
+    def identify_fixed_value_liabilities(
+        liabilities: List[Tuple[int, Optional[Decimal]]]
+    ) -> List[int]:
+        return [
+            lid for lid, rate in liabilities
+            if rate is None
+        ]
+    @staticmethod
+    def identify_high_interest_liabilities(
+        liabilities: List[Tuple[int, Optional[Decimal]]],
+        threshold: Decimal
+    ) -> List[int]:
+        return [
+            lid for lid, rate in liabilities
+            if rate and rate > threshold
+        ]
+    @staticmethod
+    def calculate_weighted_average_rate(
+        liabilities: List[Tuple[Decimal, Optional[Decimal]]]
+    ) -> Optional[Decimal]:
+        total_value = Decimal('0')
+        weighted_sum = Decimal('0')
+        for value, rate in liabilities:
+            if rate is not None:
+                total_value += value
+                weighted_sum += value * rate
+        if total_value == 0:
+            return None
+        return weighted_sum / total_value
+    @staticmethod
+    def project_liability_value(
+        current_value: Decimal,
+        interest_rate: Optional[Decimal],
+        years: int
+    ) -> Decimal:
+        if interest_rate is None:
+            return current_value
+        return apply_annual_compound_rate(
+            current_value,
+            interest_rate,
+            years
+        )
+    @staticmethod
+    def validate_liability_values(
+        liabilities: List[Tuple[int, Decimal]]
+    ) -> None:
+        for lid, value in liabilities:
+            if value <= 0:
+                raise ValueError(
+                    f"Liability {lid} has invalid value: {value}"
+                )
+calculations\base_facts\base_facts_utils\retirement_income_helpers.py
+py
+from decimal import Decimal
+from typing import List, Dict, Optional, Tuple
+from datetime import date
+from ....utils.money_utils import to_decimal, apply_annual_inflation
+from ....utils.time_utils import get_age_at_year, get_year_for_age
+class RetirementIncomeHelpers:
+    @staticmethod
+    def is_income_active(
+        start_age: int,
+        end_age: Optional[int],
+        person_dob: date,
+        current_year: int
+    ) -> Tuple[bool, str]:
+        current_age = get_age_at_year(person_dob, current_year)
+        if current_age < start_age:
+            return False, "before_start_age"
+        if end_age is not None and current_age > end_age:
+            return False, "after_end_age"
+        return True, "active"
+    @staticmethod
+    def get_year_for_age(
+        target_age: int,
+        person_dob: date
+    ) -> int:
+        return get_year_for_age(person_dob, target_age)
+    @staticmethod
+    def apply_inflation_adjustment(
+        amount: Decimal,
+        inflation_rate: Decimal,
+        years_from_start: int,
+        apply_inflation: bool
+    ) -> Tuple[Decimal, Decimal]:
+        if not apply_inflation or years_from_start == 0:
+            return amount, Decimal('0')
+        adjusted = apply_annual_inflation(
+            amount,
+            inflation_rate,
+            years_from_start
+        )
+        return adjusted, (adjusted - amount)
+    @staticmethod
+    def validate_age_boundaries(
+        start_age: int,
+        end_age: Optional[int],
+        person_dob: date,
+        plan_end_year: int
+    ) -> None:
+        if start_age < 0:
+            raise ValueError(f"Invalid start age: {start_age}")
+        if end_age is not None:
+            if end_age < start_age:
+                raise ValueError(
+                    f"End age {end_age} before start age {start_age}"
+                )
+            end_year = get_year_for_age(person_dob, end_age)
+            if end_year > plan_end_year:
+                raise ValueError(
+                    f"Income extends beyond plan end year"
+                )
+    @staticmethod
+    def generate_income_metadata(
+        income_id: int,
+        base_amount: Decimal,
+        adjusted_amount: Decimal,
+        current_age: int,
+        is_active: bool,
+        year: int
+    ) -> Dict:
+        return {
+            'income_id': income_id,
+            'year': year,
+            'current_age': current_age,
+            'base_amount': str(base_amount),
+            'adjusted_amount': str(adjusted_amount),
+            'inflation_impact': str(adjusted_amount - base_amount),
+            'is_active': is_active
+        }
+    @staticmethod
+    def calculate_lifetime_total(
+        annual_amount: Decimal,
+        start_age: int,
+        person_dob: date,
+        inflation_rate: Optional[Decimal] = None,
+        apply_inflation: bool = False
+    ) -> Optional[Decimal]:
+        if not apply_inflation or inflation_rate is None:
+            return None  # Cannot calculate without end date
+        MAX_AGE = 100
+        duration = MAX_AGE - start_age
+        total = Decimal('0')
+        for year in range(duration):
+            adjusted = apply_annual_inflation(
+                annual_amount,
+                inflation_rate,
+                year
+            )
+            total += adjusted
+        return total
+    @staticmethod
+    def categorize_income_streams(
+        streams: List[Tuple[str, Decimal, bool]]
+    ) -> Dict[str, List[Tuple[Decimal, bool]]]:
+        categories = {}
+        for name, amount, inflation_adj in streams:
+            category = name.split()[0].upper()  # E.g., "Social" from "Social Security"
+            if category not in categories:
+                categories[category] = []
+            categories[category].append((amount, inflation_adj))
+        return categories
+    @staticmethod
+    def calculate_replacement_ratio(
+        total_retirement_income: Decimal,
+        pre_retirement_income: Decimal
+    ) -> Optional[Decimal]:
+        if pre_retirement_income == 0:
+            return None
+        return (total_retirement_income / pre_retirement_income) * 100
+    @staticmethod
+    def project_income_stream(
+        current_amount: Decimal,
+        inflation_rate: Decimal,
+        years: int,
+        apply_inflation: bool
+    ) -> List[Decimal]:
+        projections = []
+        amount = current_amount
+        for year in range(years):
+            projections.append(amount)
+            if apply_inflation:
+                amount = apply_annual_inflation(
+                    amount,
+                    inflation_rate,
+                    1
+                )
+        return projections
+calculations\base_facts\cash_flows.py
+py
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Dict, Optional
+from enum import Enum
+from ...models import InflowOutflow
+from ...utils.money_utils import to_decimal, apply_annual_inflation
+class FlowType(Enum):
+    INFLOW = 'inflow'
+    OUTFLOW = 'outflow'
+@dataclass
+class CashFlowFact:
+    flow_id: int
+    name: str
+    flow_type: FlowType
+    annual_amount: Decimal
+    start_year: int
+    end_year: Optional[int]  # None means same as start_year
+    apply_inflation: bool
+    owner: str
+@dataclass
+class CashFlowCalculationResult:
+    flow_id: int
+    flow_name: str
+    flow_type: FlowType
+    base_amount: Decimal
+    adjusted_amount: Decimal
+    inflation_adjustment: Decimal
+    is_active: bool
+    metadata: Dict
+@dataclass
+class AggregatedFlows:
+    total_inflows: Decimal
+    total_outflows: Decimal
+    inflation_adjusted_inflows: Decimal
+    inflation_adjusted_outflows: Decimal
+    net_flow: Decimal
+class CashFlowCalculator:
+    def calculate_flow_amount(
+        self,
+        flow: CashFlowFact,
+        year: int,
+        inflation_rate: Decimal,
+        plan_start_year: int
+    ) -> CashFlowCalculationResult:
+        is_active = self._is_flow_active(flow, year)
+        if not is_active:
+            return CashFlowCalculationResult(
+                flow_id=flow.flow_id,
+                flow_name=flow.name,
+                flow_type=flow.flow_type,
+                base_amount=flow.annual_amount,
+                adjusted_amount=Decimal('0'),
+                inflation_adjustment=Decimal('0'),
+                is_active=False,
+                metadata=self._generate_calculation_metadata(
+                    flow, year, Decimal('0')
+                )
+            )
+        base_amount = flow.annual_amount
+        adjusted_amount = base_amount
+        inflation_adjustment = Decimal('0')
+        if flow.apply_inflation:
+            years_from_start = year - plan_start_year
+            adjusted_amount = apply_annual_inflation(
+                base_amount,
+                inflation_rate,
+                years_from_start
+            )
+            inflation_adjustment = adjusted_amount - base_amount
+        return CashFlowCalculationResult(
+            flow_id=flow.flow_id,
+            flow_name=flow.name,
+            flow_type=flow.flow_type,
+            base_amount=base_amount,
+            adjusted_amount=adjusted_amount,
+            inflation_adjustment=inflation_adjustment,
+            is_active=True,
+            metadata=self._generate_calculation_metadata(
+                flow, year, inflation_adjustment
+            )
+        )
+    def calculate_multiple_flows(
+        self,
+        flows: List[CashFlowFact],
+        year: int,
+        inflation_rate: Decimal,
+        plan_start_year: int
+    ) -> List[CashFlowCalculationResult]:
+        return [
+            self.calculate_flow_amount(
+                flow, year, inflation_rate, plan_start_year
+            )
+            for flow in flows
+        ]
+    def aggregate_flows(
+        self,
+        results: List[CashFlowCalculationResult]
+    ) -> AggregatedFlows:
+        inflows = Decimal('0')
+        outflows = Decimal('0')
+        adj_inflows = Decimal('0')
+        adj_outflows = Decimal('0')
+        for result in results:
+            if not result.is_active:
+                continue
+            if result.flow_type == FlowType.INFLOW:
+                inflows += result.base_amount
+                adj_inflows += result.adjusted_amount
+            else:
+                outflows += result.base_amount
+                adj_outflows += result.adjusted_amount
+        return AggregatedFlows(
+            total_inflows=inflows,
+            total_outflows=outflows,
+            inflation_adjusted_inflows=adj_inflows,
+            inflation_adjusted_outflows=adj_outflows,
+            net_flow=adj_inflows - adj_outflows
+        )
+    def _is_flow_active(
+        self,
+        flow: CashFlowFact,
+        year: int
+    ) -> bool:
+        end_year = flow.end_year or flow.start_year
+        return flow.start_year <= year <= end_year
+    def _generate_calculation_metadata(
+        self,
+        flow: CashFlowFact,
+        year: int,
+        inflation_adjustment: Decimal
+    ) -> Dict:
+        return {
+            'flow_name': flow.name,
+            'flow_type': flow.flow_type.value,
+            'owner': flow.owner,
+            'year': year,
+            'inflation_enabled': flow.apply_inflation,
+            'inflation_adjustment': str(inflation_adjustment),
+            'is_single_year': flow.end_year is None or flow.end_year == flow.start_year,
+            'years_active': (flow.end_year or flow.start_year) - flow.start_year + 1
+        }
+    def validate_cash_flows(
+        self,
+        flows: List[CashFlowFact]
+    ) -> None:
+        for flow in flows:
+            if flow.annual_amount <= 0:
+                raise ValueError(
+                    f"Cash flow {flow.flow_id} has invalid amount"
+                )
+            if flow.end_year is not None:
+                if flow.start_year > flow.end_year:
+                    raise ValueError(
+                        f"Cash flow {flow.flow_id} has invalid year sequence"
+                    )
+    def get_single_year_flows(
+        self,
+        results: List[CashFlowCalculationResult]
+    ) -> List[CashFlowCalculationResult]:
+        return [
+            r for r in results 
+            if r.metadata['is_single_year']
+        ]
+    def get_multi_year_flows(
+        self,
+        results: List[CashFlowCalculationResult]
+    ) -> List[CashFlowCalculationResult]:
+        return [
+            r for r in results 
+            if not r.metadata['is_single_year']
+        ]
+    def calculate_total_inflation_impact(
+        self,
+        results: List[CashFlowCalculationResult]
+    ) -> Dict[FlowType, Decimal]:
+        impact = {
+            FlowType.INFLOW: Decimal('0'),
+            FlowType.OUTFLOW: Decimal('0')
+        }
+        for result in results:
+            if result.is_active:
+                impact[result.flow_type] += result.inflation_adjustment
+        return impact
+calculations\base_facts\growth_handler.py
+py
+from decimal import Decimal
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from datetime import date
+from ...models import GrowthRateConfiguration
+from ...utils.money_utils import to_decimal, apply_annual_compound_rate
+from ...utils.validation_utils import validate_rate
+@dataclass
+class GrowthResult:
+    final_value: Decimal
+    growth_amount: Decimal
+    applied_rate: Decimal
+    rate_source: str  # 'default', 'override', or 'stepwise'
+    period_start: Optional[int] = None  # For stepwise only
+    period_end: Optional[int] = None    # For stepwise only
+class GrowthRateHandler:
+    def apply_growth(
+        self,
+        value: Decimal,
+        asset_id: int,
+        year: int,
+        default_rate: Decimal,
+        growth_configs: List[GrowthRateConfiguration]
+    ) -> GrowthResult:
+        rate, source, period = self._get_applicable_rate(growth_configs, year, default_rate)
+        final_value = apply_annual_compound_rate(value, rate)
+        growth_amount = final_value - value
+        return GrowthResult(
+            final_value=final_value,
+            growth_amount=growth_amount,
+            applied_rate=rate,
+            rate_source=source,
+            period_start=period[0] if period else None,
+            period_end=period[1] if period else None
+        )
+    def _get_applicable_rate(
+        self,
+        configs: List[GrowthRateConfiguration],
+        year: int,
+        default_rate: Decimal
+    ) -> Tuple[Decimal, str, Optional[Tuple[int, int]]]:
+        stepwise_configs = [c for c in configs if c.configuration_type == 'STEPWISE']
+        for config in stepwise_configs:
+            if config.start_year <= year and (config.end_year is None or config.end_year >= year):
+                return to_decimal(config.growth_rate), 'stepwise', (config.start_year, config.end_year)
+        override_configs = [c for c in configs if c.configuration_type == 'OVERRIDE']
+        if override_configs:
+            return to_decimal(override_configs[0].growth_rate), 'override', None
+        return default_rate, 'default', None
+    def validate_stepwise_configurations(self, configs: List[GrowthRateConfiguration]) -> None:
+        sorted_configs = sorted([c for c in configs if c.configuration_type == 'STEPWISE'], key=lambda x: x.start_year)
+        for i in range(len(sorted_configs) - 1):
+            if sorted_configs[i].end_year and sorted_configs[i].end_year >= sorted_configs[i + 1].start_year:
+                raise ValueError(f"Overlapping growth periods: {sorted_configs[i].start_year}-{sorted_configs[i].end_year} and {sorted_configs[i + 1].start_year}-{sorted_configs[i + 1].end_year}")
+            validate_rate(sorted_configs[i].growth_rate)
+calculations\base_facts\liabilities.py
+py
+“””
+- Value  
+- Optional category assignment  
+- Optional interest rate  
+- Fixed value if no rate specified  
+- No default growth rate usage, not affected by it
+7. Apply liability interest
+8. Calculate year-end total
+Important Note: The key difference from assets is the simpler growth model - liabilities don't use the default growth rate system at all.
+“””
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Dict, Optional
+from ..models import Liability
+from ..utils.money_utils import to_decimal, apply_annual_compound_rate
+@dataclass
+class LiabilityFact:
+    liability_id: int
+    value: Decimal
+    category_id: int
+    interest_rate: Optional[Decimal]
+    include_in_nest_egg: bool
+    owner: str
+    name: str
+@dataclass
+class LiabilityCalculationResult:
+    liability_id: int
+    starting_value: Decimal
+    ending_value: Decimal
+    interest_amount: Decimal
+    category_id: int
+    applied_interest_rate: Optional[Decimal]
+    included_in_nest_egg: bool
+    metadata: Dict
+class LiabilityCalculator:
+    def calculate_liability_value(
+        self,
+        liability: LiabilityFact,
+        year: int
+    ) -> LiabilityCalculationResult:
+        starting_value = liability.value
+        interest_amount = Decimal('0')
+        if liability.interest_rate is not None:
+            ending_value = apply_annual_compound_rate(
+                starting_value,
+                liability.interest_rate
+            )
+            interest_amount = ending_value - starting_value
+        else:
+            ending_value = starting_value
+        return LiabilityCalculationResult(
+            liability_id=liability.liability_id,
+            starting_value=starting_value,
+            ending_value=ending_value,
+            interest_amount=interest_amount,
+            category_id=liability.category_id,
+            applied_interest_rate=liability.interest_rate,
+            included_in_nest_egg=liability.include_in_nest_egg,
+            metadata=self._generate_calculation_metadata(
+                liability,
+                year,
+                interest_amount
+            )
+        )
+    def calculate_multiple_liabilities(
+        self,
+        liabilities: List[LiabilityFact],
+        year: int
+    ) -> List[LiabilityCalculationResult]:
+        return [
+            self.calculate_liability_value(liability, year)
+            for liability in liabilities
+        ]
+    def aggregate_by_category(
+        self,
+        results: List[LiabilityCalculationResult]
+    ) -> Dict[int, Decimal]:
+        totals = {}
+        for result in results:
+            cat_id = result.category_id
+            if cat_id not in totals:
+                totals[cat_id] = Decimal('0')
+            totals[cat_id] += result.ending_value
+        return totals
+    def calculate_nest_egg_total(
+        self,
+        results: List[LiabilityCalculationResult]
+    ) -> Decimal:
+        return sum(
+            r.ending_value 
+            for r in results 
+            if r.included_in_nest_egg
+        )
+    def calculate_total_interest(
+        self,
+        results: List[LiabilityCalculationResult]
+    ) -> Decimal:
+        return sum(r.interest_amount for r in results)
+    def _generate_calculation_metadata(
+        self,
+        liability: LiabilityFact,
+        year: int,
+        interest_amount: Decimal
+    ) -> Dict:
+        return {
+            'liability_name': liability.name,
+            'owner': liability.owner,
+            'year': year,
+            'has_interest_rate': liability.interest_rate is not None,
+            'interest_amount': str(interest_amount),
+            'is_fixed_value': liability.interest_rate is None
+        }
+    def validate_liability_facts(
+        self,
+        liabilities: List[LiabilityFact]
+    ) -> None:
+        for liability in liabilities:
+            if liability.value < 0:
+                raise ValueError(
+                    f"Liability {liability.liability_id} has negative value"
+                )
+            if liability.interest_rate is not None:
+                if liability.interest_rate < 0:
+                    raise ValueError(
+                        f"Liability {liability.liability_id} has negative interest rate"
+                    )
+    def get_fixed_value_liabilities(
+        self,
+        results: List[LiabilityCalculationResult]
+    ) -> List[LiabilityCalculationResult]:
+        return [
+            r for r in results 
+            if r.applied_interest_rate is None
+        ]
+    def get_interest_bearing_liabilities(
+        self,
+        results: List[LiabilityCalculationResult]
+    ) -> List[LiabilityCalculationResult]:
+        return [
+            r for r in results 
+            if r.applied_interest_rate is not None
+        ]
+calculations\base_facts\retirement_income.py
+py
+“””
+- Start year, end year
+- Amount
+- Optional inflation toggle
+- Input in absolute years (derived dynamically from selected person's retirement age)
+- For SS/Pension/Deferred Comp, etc.
+- Separate from scheduled inflows
+- DOB is the only true date input
+- All calculations reference absolute years internally
+- Conversion rules:
+  - Years ↔ Age: Derived dynamically from DOB when needed
+  - Store values as entered and convert as needed
+- Inflation adjustments compound annually
+- No partial year or day counting
+- All events assumed to occur at year boundaries
+1. Proper age-based activation of income streams
+2. Support for lifetime income (no end age)
+3. Optional inflation adjustments
+4. Clear separation from scheduled inflows
+5. Proper handling of DOB for age calculations
+6. Utilities for analyzing income streams by type
+“””
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Dict, Optional
+from datetime import date
+from ..models import RetirementIncomePlan
+from ..utils.money_utils import to_decimal, apply_annual_inflation
+from ..utils.time_utils import (
+    get_age_at_year,
+    get_year_for_age
+)
+@dataclass
+class RetirementIncomeFact:
+    income_id: int
+    name: str
+    owner: str
+    annual_income: Decimal
+    start_age: int
+    end_age: Optional[int]
+    include_in_nest_egg: bool
+    apply_inflation: bool
+    dob: date  # Date of birth of income owner for age calculations
+@dataclass
+class IncomeCalculationResult:
+    income_id: int
+    income_name: str
+    base_amount: Decimal
+    adjusted_amount: Decimal
+    inflation_adjustment: Decimal
+    is_active: bool
+    included_in_nest_egg: bool
+    metadata: Dict
+class RetirementIncomeCalculator:
+    def calculate_income_amount(
+        self,
+        income: RetirementIncomeFact,
+        year: int,
+        inflation_rate: Decimal,
+        plan_start_year: int
+    ) -> IncomeCalculationResult:
+        current_age = get_age_at_year(income.dob, year)
+        is_active = self._is_income_active(income, current_age)
+        if not is_active:
+            return IncomeCalculationResult(
+                income_id=income.income_id,
+                income_name=income.name,
+                base_amount=income.annual_income,
+                adjusted_amount=Decimal('0'),
+                inflation_adjustment=Decimal('0'),
+                is_active=False,
+                included_in_nest_egg=income.include_in_nest_egg,
+                metadata=self._generate_calculation_metadata(
+                    income, year, current_age, Decimal('0')
+                )
+            )
+        base_amount = income.annual_income
+        adjusted_amount = base_amount
+        inflation_adjustment = Decimal('0')
+        if income.apply_inflation:
+            years_from_start = year - plan_start_year
+            adjusted_amount = apply_annual_inflation(
+                base_amount,
+                inflation_rate,
+                years_from_start
+            )
+            inflation_adjustment = adjusted_amount - base_amount
+        return IncomeCalculationResult(
+            income_id=income.income_id,
+            income_name=income.name,
+            base_amount=base_amount,
+            adjusted_amount=adjusted_amount,
+            inflation_adjustment=inflation_adjustment,
+            is_active=True,
+            included_in_nest_egg=income.include_in_nest_egg,
+            metadata=self._generate_calculation_metadata(
+                income, year, current_age, inflation_adjustment
+            )
+        )
+    def calculate_multiple_income_streams(
+        self,
+        income_streams: List[RetirementIncomeFact],
+        year: int,
+        inflation_rate: Decimal,
+        plan_start_year: int
+    ) -> List[IncomeCalculationResult]:
+        return [
+            self.calculate_income_amount(
+                income, year, inflation_rate, plan_start_year
+            )
+            for income in income_streams
+        ]
+    def aggregate_by_source(
+        self,
+        results: List[IncomeCalculationResult]
+    ) -> Dict[str, Decimal]:
+        totals = {}
+        for result in results:
+            if result.is_active:  # Only include active income
+                source = result.income_name
+                if source not in totals:
+                    totals[source] = Decimal('0')
+                totals[source] += result.adjusted_amount
+        return totals
+    def calculate_total_income(
+        self,
+        results: List[IncomeCalculationResult],
+        nest_egg_only: bool = False
+    ) -> Decimal:
+        return sum(
+            r.adjusted_amount
+            for r in results
+            if r.is_active and (not nest_egg_only or r.included_in_nest_egg)
+        )
+    def calculate_total_inflation_impact(
+        self,
+        results: List[IncomeCalculationResult]
+    ) -> Decimal:
+        return sum(
+            r.inflation_adjustment
+            for r in results
+            if r.is_active
+        )
+    def _is_income_active(
+        self,
+        income: RetirementIncomeFact,
+        current_age: int
+    ) -> bool:
+        if current_age < income.start_age:
+            return False
+        if income.end_age is not None and current_age > income.end_age:
+            return False
+        return True
+    def _generate_calculation_metadata(
+        self,
+        income: RetirementIncomeFact,
+        year: int,
+        current_age: int,
+        inflation_adjustment: Decimal
+    ) -> Dict:
+        return {
+            'income_name': income.name,
+            'owner': income.owner,
+            'year': year,
+            'current_age': current_age,
+            'inflation_enabled': income.apply_inflation,
+            'inflation_adjustment': str(inflation_adjustment),
+            'start_age': income.start_age,
+            'end_age': income.end_age or 'Lifetime',
+            'is_lifetime_income': income.end_age is None
+        }
+    def validate_retirement_income_facts(
+        self,
+        income_streams: List[RetirementIncomeFact]
+    ) -> None:
+        for income in income_streams:
+            if income.annual_income <= 0:
+                raise ValueError(
+                    f"Income stream {income.income_id} has invalid amount"
+                )
+            if income.end_age is not None:
+                if income.start_age > income.end_age:
+                    raise ValueError(
+                        f"Income stream {income.income_id} has invalid age sequence"
+                    )
+    def get_lifetime_income_streams(
+        self,
+        results: List[IncomeCalculationResult]
+    ) -> List[IncomeCalculationResult]:
+        return [
+            r for r in results 
+            if 'is_lifetime_income' in r.metadata 
+            and r.metadata['is_lifetime_income']
+        ]
+    def get_fixed_term_income_streams(
+        self,
+        results: List[IncomeCalculationResult]
+    ) -> List[IncomeCalculationResult]:
+        return [
+            r for r in results 
+            if 'is_lifetime_income' in r.metadata 
+            and not r.metadata['is_lifetime_income']
+        ]
+calculations\scenario\scenario_calculator.py
+py
+“””
+- Clone of base facts
+- Inherits all base facts and base assumptions
+- Can override any base fact as well as the fact's parameters
+- Unique: Has retirement spending
+- Retirement spending:
+  - Starts at retirement year
+  - Always inflation adjusted
+  - Common use: Max sustainable spend
+Base facts must remain unchanged while scenarios can modify:
+- Asset values and growth
+- Liability values and interest
+- Cash flow amounts and timing
+- Retirement income amounts and timing
+- Base assumptions
+- All values shown in current dollars
+- Inflation adjustments compound annually
+Key features of this implementation:
+1. Proper inheritance of base facts
+2. Support for all types of overrides
+3. Always-inflating retirement spending
+4. Clear tracking of override impacts
+5. Maintains base fact integrity
+6. Comprehensive validation
+“””
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import List, Dict, Optional
+from copy import deepcopy
+from ..models import Scenario, ScenarioAssumption, ScenarioOverride
+from ..base_facts.base_facts_calculator import (
+    BaseFacts,
+    YearlyCalculationResult,
+    PortfolioValues,
+    CashFlowResults,
+    IncomeResults
+)
+from ..utils.money_utils import to_decimal, apply_annual_inflation
+@dataclass
+class ScenarioFact:
+    scenario_id: int
+    name: str
+    base_facts: BaseFacts
+    retirement_spending: Decimal
+    assumption_overrides: Optional[ScenarioAssumption]
+    component_overrides: List[ScenarioOverride]
+@dataclass
+class ScenarioAssumptions:
+    retirement_age_1: Optional[int]
+    retirement_age_2: Optional[int]
+    default_growth_rate: Optional[Decimal]
+    inflation_rate: Optional[Decimal]
+@dataclass
+class ScenarioCalculationResult:
+    base_result: YearlyCalculationResult
+    scenario_portfolio: PortfolioValues
+    retirement_spending: Decimal
+    adjusted_spending: Decimal
+    spending_impact: Decimal
+    override_impacts: Dict[str, Decimal]
+    metadata: Dict
+class ScenarioCalculator:
+    def calculate_scenario_year(
+        self,
+        scenario: ScenarioFact,
+        year: int,
+        base_result: YearlyCalculationResult,
+        prior_scenario_result: Optional[ScenarioCalculationResult] = None
+    ) -> ScenarioCalculationResult:
+        scenario_portfolio = deepcopy(base_result.ending_portfolio)
+        if scenario.assumption_overrides:
+            scenario_portfolio = self._apply_assumption_overrides(
+                scenario_portfolio,
+                scenario.assumption_overrides,
+                year
+            )
+        override_impacts = self._apply_component_overrides(
+            scenario_portfolio,
+            scenario.component_overrides,
+            year
+        )
+        retirement_spending = Decimal('0')
+        adjusted_spending = Decimal('0')
+        spending_impact = Decimal('0')
+        if self._is_retirement_spending_active(scenario, year):
+            retirement_spending = scenario.retirement_spending
+            years_from_start = year - scenario.base_facts.start_year
+            adjusted_spending = apply_annual_inflation(
+                retirement_spending,
+                self._get_inflation_rate(scenario),
+                years_from_start
+            )
+            spending_impact = adjusted_spending - retirement_spending
+            scenario_portfolio = self._apply_retirement_spending(
+                scenario_portfolio,
+                adjusted_spending
+            )
+        return ScenarioCalculationResult(
+            base_result=base_result,
+            scenario_portfolio=scenario_portfolio,
+            retirement_spending=retirement_spending,
+            adjusted_spending=adjusted_spending,
+            spending_impact=spending_impact,
+            override_impacts=override_impacts,
+            metadata=self._generate_calculation_metadata(
+                scenario,
+                year,
+                override_impacts,
+                spending_impact
+            )
+        )
+    def _apply_assumption_overrides(
+        self,
+        portfolio: PortfolioValues,
+        overrides: ScenarioAssumption,
+        year: int
+    ) -> PortfolioValues:
+        if overrides.default_growth_rate is not None:
+            portfolio = self._recalculate_growth(
+                portfolio,
+                overrides.default_growth_rate,
+                year
+            )
+        return portfolio
+    def _apply_component_overrides(
+        self,
+        portfolio: PortfolioValues,
+        overrides: List[ScenarioOverride],
+        year: int
+    ) -> Dict[str, Decimal]:
+        impacts = {
+            'asset_value': Decimal('0'),
+            'liability_value': Decimal('0'),
+            'cash_flow': Decimal('0'),
+            'retirement_income': Decimal('0')
+        }
+        for override in overrides:
+            original_value = self._get_original_value(portfolio, override)
+            new_value = to_decimal(override.override_value)
+            impact = new_value - original_value
+            if override.asset_id:
+                impacts['asset_value'] += impact
+                portfolio.asset_values[override.asset_id] = new_value
+            elif override.liability_id:
+                impacts['liability_value'] += impact
+                portfolio.liability_values[override.liability_id] = new_value
+        return impacts
+    def _apply_retirement_spending(
+        self,
+        portfolio: PortfolioValues,
+        spending_amount: Decimal
+    ) -> PortfolioValues:
+        portfolio.retirement_portfolio_value -= spending_amount
+        return self._update_portfolio_totals(portfolio)
+    def _is_retirement_spending_active(
+        self,
+        scenario: ScenarioFact,
+        year: int
+    ) -> bool:
+        retirement_year = (
+            scenario.assumption_overrides.retirement_age_1
+            if scenario.assumption_overrides and scenario.assumption_overrides.retirement_age_1
+            else scenario.base_facts.retirement_year
+        )
+        return year >= retirement_year
+    def _get_inflation_rate(
+        self,
+        scenario: ScenarioFact
+    ) -> Decimal:
+        if (scenario.assumption_overrides and 
+            scenario.assumption_overrides.inflation_rate is not None):
+            return scenario.assumption_overrides.inflation_rate
+        return to_decimal(scenario.base_facts.base_assumptions.inflation_rate)
+    def _get_original_value(
+        self,
+        portfolio: PortfolioValues,
+        override: ScenarioOverride
+    ) -> Decimal:
+        if override.asset_id:
+            return portfolio.asset_values[override.asset_id]
+        elif override.liability_id:
+            return portfolio.liability_values[override.liability_id]
+        return Decimal('0')
+    def _recalculate_growth(
+        self,
+        portfolio: PortfolioValues,
+        growth_rate: Decimal,
+        year: int
+    ) -> PortfolioValues:
+        return portfolio
+    def _update_portfolio_totals(
+        self,
+        portfolio: PortfolioValues
+    ) -> PortfolioValues:
+        portfolio.total_net_worth = (
+            sum(portfolio.asset_values.values()) -
+            sum(portfolio.liability_values.values())
+        )
+        return portfolio
+    def _generate_calculation_metadata(
+        self,
+        scenario: ScenarioFact,
+        year: int,
+        override_impacts: Dict[str, Decimal],
+        spending_impact: Decimal
+    ) -> Dict:
+        return {
+            'scenario_name': scenario.name,
+            'year': year,
+            'has_assumption_overrides': scenario.assumption_overrides is not None,
+            'override_count': len(scenario.component_overrides),
+            'total_override_impact': sum(override_impacts.values()),
+            'spending_impact': spending_impact
+        }
+    def validate_scenario_facts(
+        self,
+        scenario: ScenarioFact
+    ) -> None:
+        if scenario.retirement_spending < 0:
+            raise ValueError("Retirement spending cannot be negative")
+        if scenario.assumption_overrides:
+            if (scenario.assumption_overrides.retirement_age_1 and 
+                scenario.assumption_overrides.retirement_age_1 < 0):
+                raise ValueError("Invalid retirement age override")
+        for override in scenario.component_overrides:
+            if not any([
+                override.asset_id,
+                override.liability_id,
+                override.inflow_outflow_id,
+                override.retirement_income_plan_id
+            ]):
+                raise ValueError(f"Override {override.override_id} has no target")
+    def generate_override_summary(
+        self,
+        scenario: ScenarioFact
+    ) -> Dict[str, int]:
+        summary = {
+            'asset_overrides': 0,
+            'liability_overrides': 0,
+            'cash_flow_overrides': 0,
+            'retirement_income_overrides': 0
+        }
+        for override in scenario.component_overrides:
+            if override.asset_id:
+                summary['asset_overrides'] += 1
+            elif override.liability_id:
+                summary['liability_overrides'] += 1
+            elif override.inflow_outflow_id:
+                summary['cash_flow_overrides'] += 1
+            elif override.retirement_income_plan_id:
+                summary['retirement_income_overrides'] += 1
+        return summary
+calculations\scenario\scenario_utils\scenario_calculator_helper.py
+py
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
+from copy import deepcopy
+from ....models import ScenarioOverride
+from ....utils.money_utils import to_decimal, apply_annual_inflation
+class ScenarioCalculatorHelpers:
+    @staticmethod
+    def apply_asset_overrides(
+        base_values: Dict[int, Decimal],
+        overrides: List[ScenarioOverride]
+    ) -> Tuple[Dict[int, Decimal], Dict[int, Decimal]]:
+        new_values = base_values.copy()
+        impacts = {}
+        for override in overrides:
+            if override.asset_id:
+                original = new_values[override.asset_id]
+                new_value = to_decimal(override.override_value)
+                impacts[override.asset_id] = new_value - original
+                new_values[override.asset_id] = new_value
+        return new_values, impacts
+    @staticmethod
+    def apply_liability_overrides(
+        base_values: Dict[int, Decimal],
+        overrides: List[ScenarioOverride]
+    ) -> Tuple[Dict[int, Decimal], Dict[int, Decimal]]:
+        new_values = base_values.copy()
+        impacts = {}
+        for override in overrides:
+            if override.liability_id:
+                original = new_values[override.liability_id]
+                new_value = to_decimal(override.override_value)
+                impacts[override.liability_id] = new_value - original
+                new_values[override.liability_id] = new_value
+        return new_values, impacts
+    @staticmethod
+    def apply_cash_flow_overrides(
+        base_flows: Dict[int, Tuple[Decimal, bool]],
+        overrides: List[ScenarioOverride]
+    ) -> Tuple[Dict[int, Tuple[Decimal, bool]], Dict[int, Decimal]]:
+        new_flows = base_flows.copy()
+        impacts = {}
+        for override in overrides:
+            if override.inflow_outflow_id:
+                original_amount, inflation_flag = new_flows[override.inflow_outflow_id]
+                if override.override_field == 'annual_amount':
+                    new_amount = to_decimal(override.override_value)
+                    impacts[override.inflow_outflow_id] = new_amount - original_amount
+                    new_flows[override.inflow_outflow_id] = (new_amount, inflation_flag)
+                elif override.override_field == 'apply_inflation':
+                    new_flows[override.inflow_outflow_id] = (
+                        original_amount,
+                        override.override_value.lower() == 'true'
+                    )
+        return new_flows, impacts
+    @staticmethod
+    def is_retirement_spending_active(
+        current_year: int,
+        retirement_year: int,
+        override_retirement_year: Optional[int]
+    ) -> bool:
+        effective_year = override_retirement_year or retirement_year
+        return current_year >= effective_year
+    @staticmethod
+    def calculate_adjusted_spending(
+        base_amount: Decimal,
+        inflation_rate: Decimal,
+        years_from_retirement: int
+    ) -> Decimal:
+        return apply_annual_inflation(
+            base_amount,
+            inflation_rate,
+            years_from_retirement
+        )
+    @staticmethod
+    def generate_scenario_metadata(
+        scenario_id: int,
+        base_values: Dict[str, Decimal],
+        scenario_values: Dict[str, Decimal],
+        override_impacts: Dict[str, Decimal],
+        year: int
+    ) -> Dict:
+        return {
+            'scenario_id': scenario_id,
+            'year': year,
+            'total_override_impact': sum(override_impacts.values()),
+            'override_count': len(override_impacts),
+            'net_portfolio_impact': (
+                scenario_values['portfolio'] - base_values['portfolio']
+            )
+        }
+    @staticmethod
+    def track_override_history(
+        current_overrides: Dict[str, Decimal],
+        historical_overrides: List[Dict[str, Decimal]],
+        year: int
+    ) -> Dict[str, List[Tuple[int, Decimal]]]:
+        history = {}
+        for override_type, impact in current_overrides.items():
+            history[override_type] = [(year, impact)]
+        for historical in historical_overrides:
+            for override_type, impact in historical.items():
+                if override_type in history:
+                    history[override_type].append(
+                        (historical['year'], impact)
+                    )
+        return history
+    @staticmethod
+    def validate_override_consistency(
+        overrides: List[ScenarioOverride]
+    ) -> None:
+        target_overrides = {}
+        for override in overrides:
+            target_id = None
+            if override.asset_id:
+                target_id = ('asset', override.asset_id)
+            elif override.liability_id:
+                target_id = ('liability', override.liability_id)
+            elif override.inflow_outflow_id:
+                target_id = ('flow', override.inflow_outflow_id)
+            elif override.retirement_income_plan_id:
+                target_id = ('income', override.retirement_income_plan_id)
+            if target_id:
+                if target_id in target_overrides:
+                    if override.override_field == target_overrides[target_id]:
+                        raise ValueError(
+                            f"Conflicting overrides for {target_id[0]} "
+                            f"{target_id[1]}: {override.override_field}"
+                        )
+                target_overrides[target_id] = override.override_field
+connection.py
+py
+from pathlib import Path
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import StaticPool
+DB_PATH = Path(__file__).parent / "database" / "fiply2_database.db"
+def get_engine() -> Engine:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False, 
+        future=True, 
+        poolclass=StaticPool, 
+        connect_args={"check_same_thread": False} 
+    )
+    return engine
+def get_session() -> Session:
+    engine = get_engine()
+    SessionLocal = sessionmaker(
+        bind=engine,
+        autocommit=False,
+        autoflush=False,
+        future=True 
+    )
+    return SessionLocal()
+engine = get_engine()
+crud\base_assumptions.py
+py
+from datetime import datetime
+from typing import Optional, Dict, Any
+from decimal import Decimal
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ..models import BaseAssumption, Plan
+from ..utils.time_validations import (
+    validate_retirement_age,
+    validate_final_age,
+    validate_age_sequence
+)
+from ..utils.money_validations import validate_rate
+class BaseAssumptionCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_base_assumptions(
+        self,
+        plan_id: int,
+        retirement_age_1: int,
+        final_age_1: int,
+        default_growth_rate: float,
+        inflation_rate: float,
+        retirement_age_2: Optional[int] = None,
+        final_age_2: Optional[int] = None,
+        final_age_selector: int = 1,
+    ) -> BaseAssumption:
+        stmt = select(Plan).where(Plan.plan_id == plan_id)
+        plan = self.session.execute(stmt).scalar_one_or_none()
+        if not plan:
+            raise NoResultFound(f"Plan {plan_id} not found")
+        if not validate_retirement_age(retirement_age_1):
+            raise ValueError("Invalid retirement age for person 1")
+        if not validate_final_age(final_age_1):
+            raise ValueError("Invalid final age for person 1")
+        if not validate_age_sequence(plan.household.person1_dob.year, retirement_age_1, final_age_1):
+            raise ValueError("Invalid age sequence for person 1")
+        if retirement_age_2 is not None:
+            if not validate_retirement_age(retirement_age_2):
+                raise ValueError("Invalid retirement age for person 2")
+            if final_age_2 is not None:
+                if not validate_final_age(final_age_2):
+                    raise ValueError("Invalid final age for person 2")
+                if not validate_age_sequence(plan.household.person2_dob.year, retirement_age_2, final_age_2):
+                    raise ValueError("Invalid age sequence for person 2")
+        validate_rate(default_growth_rate, "default_growth_rate")
+        validate_rate(inflation_rate, "inflation_rate")
+        if final_age_selector not in [1, 2]:
+            raise ValueError("final_age_selector must be 1 or 2")
+        if final_age_selector == 2 and final_age_2 is None:
+            raise ValueError("Cannot select person 2's final age when it's not provided")
+        base_assumptions = BaseAssumption(
+            plan_id=plan_id,
+            retirement_age_1=retirement_age_1,
+            retirement_age_2=retirement_age_2,
+            final_age_1=final_age_1,
+            final_age_2=final_age_2,
+            final_age_selector=final_age_selector,
+            default_growth_rate=default_growth_rate,
+            inflation_rate=inflation_rate
+        )
+        try:
+            self.session.add(base_assumptions)
+            self.session.commit()
+            return base_assumptions
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create base assumptions", orig=e)
+    def get_base_assumptions(self, plan_id: int) -> Optional[BaseAssumption]:
+        stmt = select(BaseAssumption).where(BaseAssumption.plan_id == plan_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+    def update_base_assumptions(
+        self,
+        plan_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[BaseAssumption]:
+        stmt = select(BaseAssumption, Plan).join(Plan).where(BaseAssumption.plan_id == plan_id)
+        result = self.session.execute(stmt).first()
+        if not result:
+            return None
+        current_assumptions, plan = result
+        if 'default_growth_rate' in update_data:
+            validate_rate(update_data['default_growth_rate'], "default_growth_rate")
+        if 'inflation_rate' in update_data:
+            validate_rate(update_data['inflation_rate'], "inflation_rate")
+        retirement_age_1 = update_data.get('retirement_age_1', current_assumptions.retirement_age_1)
+        final_age_1 = update_data.get('final_age_1', current_assumptions.final_age_1)
+        retirement_age_2 = update_data.get('retirement_age_2', current_assumptions.retirement_age_2)
+        final_age_2 = update_data.get('final_age_2', current_assumptions.final_age_2)
+        if 'retirement_age_1' in update_data or 'final_age_1' in update_data:
+            if not validate_age_sequence(plan.household.person1_dob.year, retirement_age_1, final_age_1):
+                raise ValueError("Invalid age sequence for person 1")
+        if (retirement_age_2 is not None and 
+            ('retirement_age_2' in update_data or 'final_age_2' in update_data)):
+            if not validate_age_sequence(plan.household.person2_dob.year, retirement_age_2, final_age_2):
+                raise ValueError("Invalid age sequence for person 2")
+        try:
+            stmt = (
+                update(BaseAssumption)
+                .where(BaseAssumption.plan_id == plan_id)
+                .values(**update_data)
+                .returning(BaseAssumption)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update base assumptions", orig=e)
+    def delete_base_assumptions(self, plan_id: int) -> bool:
+        stmt = delete(BaseAssumption).where(BaseAssumption.plan_id == plan_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_year_mappings(self, plan_id: int) -> Dict[str, int]:
+        stmt = (
+            select(BaseAssumption, Plan)
+            .join(Plan)
+            .where(BaseAssumption.plan_id == plan_id)
+        )
+        result = self.session.execute(stmt).first()
+        if not result:
+            raise NoResultFound(f"Base assumptions not found for plan {plan_id}")
+        assumptions, plan = result
+        if assumptions.final_age_selector == 1:
+            dob = plan.household.person1_dob
+            retirement_age = assumptions.retirement_age_1
+            final_age = assumptions.final_age_1
+        else:
+            dob = plan.household.person2_dob
+            retirement_age = assumptions.retirement_age_2
+            final_age = assumptions.final_age_2
+        start_year = datetime.now().year  # Always starts in current year
+        retirement_year = dob.year + retirement_age
+        end_year = dob.year + final_age
+        return {
+            'start_year': start_year,
+            'retirement_year': retirement_year,
+            'end_year': end_year
+        }
+crud\financial\__init__.py
+py
+from .assets import *
+from .liabilities import *
+from .cash_flows import *
+from .retirement import *
+from .growth_rates import * 
+crud\financial\assets.py
+py
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete, and_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ...models import Asset, AssetCategory, GrowthRateConfiguration, Plan
+from ...utils.money_validations import (
+    validate_positive_amount,
+    validate_rate,
+    validate_stepwise_growth_config
+)
+class AssetCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_asset(
+        self,
+        plan_id: int,
+        asset_category_id: int,
+        asset_name: str,
+        value: float,
+        owner: str,
+        include_in_nest_egg: bool = True,
+        growth_config: Optional[Dict[str, Any]] = None
+    ) -> Asset:
+        stmt = select(Plan).join(AssetCategory).where(
+            and_(
+                Plan.plan_id == plan_id,
+                AssetCategory.asset_category_id == asset_category_id
+            )
+        )
+        if not self.session.execute(stmt).scalar_one_or_none():
+            raise NoResultFound(f"Plan {plan_id} or category {asset_category_id} not found")
+        validate_positive_amount(value, "asset_value")
+        if owner not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        asset = Asset(
+            plan_id=plan_id,
+            asset_category_id=asset_category_id,
+            asset_name=asset_name,
+            value=value,
+            owner=owner,
+            include_in_nest_egg=include_in_nest_egg
+        )
+        try:
+            self.session.add(asset)
+            self.session.flush()  # Get asset_id without committing
+            if growth_config:
+                self._add_growth_configuration(asset.asset_id, growth_config)
+            self.session.commit()
+            return asset
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create asset", orig=e)
+    def get_asset(
+        self, 
+        asset_id: int,
+        include_growth_config: bool = False
+    ) -> Optional[Asset]:
+        stmt = select(Asset).where(Asset.asset_id == asset_id)
+        if include_growth_config:
+            stmt = stmt.options(joinedload(Asset.growth_rates))
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_plan_assets(
+        self, 
+        plan_id: int,
+        category_id: Optional[int] = None
+    ) -> List[Asset]:
+        stmt = select(Asset).where(Asset.plan_id == plan_id)
+        if category_id:
+            stmt = stmt.where(Asset.asset_category_id == category_id)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_asset(
+        self,
+        asset_id: int,
+        update_data: Dict[str, Any],
+        growth_config: Optional[Dict[str, Any]] = None
+    ) -> Optional[Asset]:
+        if 'value' in update_data:
+            validate_positive_amount(update_data['value'], "asset_value")
+        if 'owner' in update_data and update_data['owner'] not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        try:
+            stmt = (
+                update(Asset)
+                .where(Asset.asset_id == asset_id)
+                .values(**update_data)
+                .returning(Asset)
+            )
+            result = self.session.execute(stmt)
+            asset = result.scalar_one_or_none()
+            if not asset:
+                return None
+            if growth_config:
+                stmt = delete(GrowthRateConfiguration).where(
+                    GrowthRateConfiguration.asset_id == asset_id
+                )
+                self.session.execute(stmt)
+                self._add_growth_configuration(asset_id, growth_config)
+            self.session.commit()
+            return asset
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update asset", orig=e)
+    def delete_asset(self, asset_id: int) -> bool:
+        stmt = delete(Asset).where(Asset.asset_id == asset_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def _add_growth_configuration(
+        self,
+        asset_id: int,
+        config: Dict[str, Any]
+    ) -> None:
+        config_type = config.get('configuration_type')
+        if config_type not in ['DEFAULT', 'OVERRIDE', 'STEPWISE']:
+            raise ValueError("Invalid growth configuration type")
+        if config_type == 'STEPWISE':
+            periods = config.get('periods', [])
+            validate_stepwise_growth_config(periods, "growth_periods")
+            for period in periods:
+                validate_rate(period['growth_rate'], "growth_rate")
+                growth_config = GrowthRateConfiguration(
+                    asset_id=asset_id,
+                    configuration_type='STEPWISE',
+                    start_year=period['start_year'],
+                    end_year=period['end_year'],
+                    growth_rate=period['growth_rate']
+                )
+                self.session.add(growth_config)
+        else:
+            validate_rate(config.get('growth_rate'), "growth_rate")
+            growth_config = GrowthRateConfiguration(
+                asset_id=asset_id,
+                configuration_type=config_type,
+                start_year=config.get('start_year'),
+                end_year=config.get('end_year'),
+                growth_rate=config.get('growth_rate')
+            )
+            self.session.add(growth_config)
+    def get_asset_summary(self, asset_id: int) -> Optional[Dict[str, Any]]:
+        asset = self.get_asset(asset_id, include_growth_config=True)
+        if not asset:
+            return None
+        growth_config = None
+        if asset.growth_rates:
+            if len(asset.growth_rates) == 1:
+                config = asset.growth_rates[0]
+                growth_config = {
+                    'type': config.configuration_type,
+                    'rate': config.growth_rate
+                }
+            else:
+                growth_config = {
+                    'type': 'STEPWISE',
+                    'periods': [
+                        {
+                            'start_year': config.start_year,
+                            'end_year': config.end_year,
+                            'rate': config.growth_rate
+                        }
+                        for config in sorted(
+                            asset.growth_rates,
+                            key=lambda x: x.start_year
+                        )
+                    ]
+                }
+        return {
+            'asset_id': asset.asset_id,
+            'asset_name': asset.asset_name,
+            'category_id': asset.asset_category_id,
+            'value': asset.value,
+            'owner': asset.owner,
+            'include_in_nest_egg': asset.include_in_nest_egg,
+            'growth_configuration': growth_config
+        }
+crud\financial\cash_flows.py
+py
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ...models import InflowOutflow, Plan
+from ...utils.money_validations import validate_positive_amount
+from ...utils.time_validations import (
+    validate_projection_timeline,
+    is_within_projection_period
+)
+class CashFlowCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_cash_flow(
+        self,
+        plan_id: int,
+        flow_type: str,
+        name: str,
+        annual_amount: float,
+        start_year: int,
+        owner: str,
+        end_year: Optional[int] = None,
+        apply_inflation: bool = False
+    ) -> InflowOutflow:
+        stmt = select(Plan).where(Plan.plan_id == plan_id)
+        plan = self.session.execute(stmt).scalar_one_or_none()
+        if not plan:
+            raise NoResultFound(f"Plan {plan_id} not found")
+        if flow_type not in ['inflow', 'outflow']:
+            raise ValueError("Invalid flow type")
+        validate_positive_amount(annual_amount, "annual_amount")
+        if owner not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        end_year = end_year or start_year
+        if start_year > end_year:
+            raise ValueError("Start year must be before or equal to end year")
+        cash_flow = InflowOutflow(
+            plan_id=plan_id,
+            type=flow_type,
+            name=name,
+            annual_amount=annual_amount,
+            start_year=start_year,
+            end_year=end_year,
+            owner=owner,
+            apply_inflation=apply_inflation
+        )
+        try:
+            self.session.add(cash_flow)
+            self.session.commit()
+            return cash_flow
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create cash flow", orig=e)
+    def get_cash_flow(self, flow_id: int) -> Optional[InflowOutflow]:
+        stmt = select(InflowOutflow).where(InflowOutflow.inflow_outflow_id == flow_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_plan_cash_flows(
+        self,
+        plan_id: int,
+        flow_type: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> List[InflowOutflow]:
+        stmt = select(InflowOutflow).where(InflowOutflow.plan_id == plan_id)
+        if flow_type:
+            stmt = stmt.where(InflowOutflow.type == flow_type)
+        if year is not None:
+            stmt = stmt.where(
+                InflowOutflow.start_year <= year,
+                InflowOutflow.end_year >= year
+            )
+        return list(self.session.execute(stmt).scalars().all())
+    def update_cash_flow(
+        self,
+        flow_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[InflowOutflow]:
+        if 'annual_amount' in update_data:
+            validate_positive_amount(update_data['annual_amount'], "annual_amount")
+        if 'type' in update_data and update_data['type'] not in ['inflow', 'outflow']:
+            raise ValueError("Invalid flow type")
+        if 'owner' in update_data and update_data['owner'] not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        if 'start_year' in update_data or 'end_year' in update_data:
+            current_flow = self.get_cash_flow(flow_id)
+            if not current_flow:
+                return None
+            start_year = update_data.get('start_year', current_flow.start_year)
+            end_year = update_data.get('end_year', current_flow.end_year)
+            if start_year > end_year:
+                raise ValueError("Start year must be before or equal to end year")
+        try:
+            stmt = (
+                update(InflowOutflow)
+                .where(InflowOutflow.inflow_outflow_id == flow_id)
+                .values(**update_data)
+                .returning(InflowOutflow)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one_or_none()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update cash flow", orig=e)
+    def delete_cash_flow(self, flow_id: int) -> bool:
+        stmt = delete(InflowOutflow).where(InflowOutflow.inflow_outflow_id == flow_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_cash_flow_summary(self, flow_id: int) -> Optional[Dict[str, Any]]:
+        cash_flow = self.get_cash_flow(flow_id)
+        if not cash_flow:
+            return None
+        duration = cash_flow.end_year - cash_flow.start_year + 1
+        return {
+            'flow_id': cash_flow.inflow_outflow_id,
+            'name': cash_flow.name,
+            'type': cash_flow.type,
+            'annual_amount': cash_flow.annual_amount,
+            'start_year': cash_flow.start_year,
+            'end_year': cash_flow.end_year,
+            'owner': cash_flow.owner,
+            'apply_inflation': cash_flow.apply_inflation,
+            'duration_years': duration,
+            'is_single_year': duration == 1,
+            'total_nominal_amount': cash_flow.annual_amount * duration
+        }
+    def get_year_totals(
+        self,
+        plan_id: int,
+        year: int,
+        include_inflation: bool = True
+    ) -> Dict[str, float]:
+        active_flows = self.get_plan_cash_flows(plan_id, year=year)
+        totals = {
+            'inflows': 0.0,
+            'outflows': 0.0,
+            'net_flow': 0.0
+        }
+        for flow in active_flows:
+            if flow.type == 'inflow':
+                totals['inflows'] += flow.annual_amount
+            else:
+                totals['outflows'] += flow.annual_amount
+        totals['net_flow'] = totals['inflows'] - totals['outflows']
+        return totals
+crud\financial\growth_rates.py
+py
+from typing import List, Optional, Dict, Any, Union
+from sqlalchemy import select, update, delete, and_, or_
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from ...models import (
+    GrowthRateConfiguration,
+    Asset,
+    RetirementIncomePlan,
+    Scenario
+)
+from ...utils.money_validations import validate_rate
+from ...utils.time_validations import validate_stepwise_periods
+class GrowthRateCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_growth_config(
+        self,
+        configuration_type: str,
+        start_year: int,
+        growth_rate: float,
+        end_year: Optional[int] = None,
+        asset_id: Optional[int] = None,
+        retirement_income_plan_id: Optional[int] = None,
+        scenario_id: Optional[int] = None
+    ) -> GrowthRateConfiguration:
+        if configuration_type not in ['DEFAULT', 'OVERRIDE', 'STEPWISE']:
+            raise ValueError("Invalid configuration type")
+        targets = [asset_id, retirement_income_plan_id, scenario_id]
+        if len([t for t in targets if t is not None]) != 1:
+            raise ValueError("Must specify exactly one target (asset, retirement income, or scenario)")
+        validate_rate(growth_rate, "growth_rate")
+        if end_year is not None and start_year > end_year:
+            raise ValueError("Start year must be before or equal to end year")
+        config = GrowthRateConfiguration(
+            configuration_type=configuration_type,
+            start_year=start_year,
+            end_year=end_year,
+            growth_rate=growth_rate,
+            asset_id=asset_id,
+            retirement_income_plan_id=retirement_income_plan_id,
+            scenario_id=scenario_id
+        )
+        try:
+            self.session.add(config)
+            self.session.commit()
+            return config
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create growth configuration", orig=e)
+    def create_stepwise_config(
+        self,
+        periods: List[Dict[str, Any]],
+        asset_id: Optional[int] = None,
+        retirement_income_plan_id: Optional[int] = None,
+        scenario_id: Optional[int] = None
+    ) -> List[GrowthRateConfiguration]:
+        targets = [asset_id, retirement_income_plan_id, scenario_id]
+        if len([t for t in targets if t is not None]) != 1:
+            raise ValueError("Must specify exactly one target (asset, retirement income, or scenario)")
+        period_tuples = [(p['start_year'], p['end_year']) for p in periods]
+        if not validate_stepwise_periods(period_tuples):
+            raise ValueError("Stepwise periods must be chronological and non-overlapping")
+        for period in periods:
+            validate_rate(period['growth_rate'], "growth_rate")
+        try:
+            configs = []
+            for period in periods:
+                config = GrowthRateConfiguration(
+                    configuration_type='STEPWISE',
+                    start_year=period['start_year'],
+                    end_year=period['end_year'],
+                    growth_rate=period['growth_rate'],
+                    asset_id=asset_id,
+                    retirement_income_plan_id=retirement_income_plan_id,
+                    scenario_id=scenario_id
+                )
+                self.session.add(config)
+                configs.append(config)
+            self.session.commit()
+            return configs
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create stepwise configurations", orig=e)
+    def get_growth_config(self, config_id: int) -> Optional[GrowthRateConfiguration]:
+        stmt = select(GrowthRateConfiguration).where(
+            GrowthRateConfiguration.growth_rate_id == config_id
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_configurations_for_target(
+        self,
+        target_type: str,
+        target_id: int
+    ) -> List[GrowthRateConfiguration]:
+        if target_type not in ['asset', 'retirement_income', 'scenario']:
+            raise ValueError("Invalid target type")
+        id_map = {
+            'asset': GrowthRateConfiguration.asset_id,
+            'retirement_income': GrowthRateConfiguration.retirement_income_plan_id,
+            'scenario': GrowthRateConfiguration.scenario_id
+        }
+        stmt = (
+            select(GrowthRateConfiguration)
+            .where(id_map[target_type] == target_id)
+            .order_by(GrowthRateConfiguration.start_year)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+    def update_growth_config(
+        self,
+        config_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[GrowthRateConfiguration]:
+        if 'configuration_type' in update_data:
+            if update_data['configuration_type'] not in ['DEFAULT', 'OVERRIDE', 'STEPWISE']:
+                raise ValueError("Invalid configuration type")
+        if 'growth_rate' in update_data:
+            validate_rate(update_data['growth_rate'], "growth_rate")
+        if 'start_year' in update_data or 'end_year' in update_data:
+            current_config = self.get_growth_config(config_id)
+            if not current_config:
+                return None
+            start_year = update_data.get('start_year', current_config.start_year)
+            end_year = update_data.get('end_year', current_config.end_year)
+            if end_year is not None and start_year > end_year:
+                raise ValueError("Start year must be before or equal to end year")
+        try:
+            stmt = (
+                update(GrowthRateConfiguration)
+                .where(GrowthRateConfiguration.growth_rate_id == config_id)
+                .values(**update_data)
+                .returning(GrowthRateConfiguration)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one_or_none()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update growth configuration", orig=e)
+    def delete_growth_config(self, config_id: int) -> bool:
+        stmt = delete(GrowthRateConfiguration).where(
+            GrowthRateConfiguration.growth_rate_id == config_id
+        )
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_growth_config_summary(self, config_id: int) -> Optional[Dict[str, Any]]:
+        config = self.get_growth_config(config_id)
+        if not config:
+            return None
+        target_type = None
+        target_id = None
+        if config.asset_id:
+            target_type = 'asset'
+            target_id = config.asset_id
+        elif config.retirement_income_plan_id:
+            target_type = 'retirement_income'
+            target_id = config.retirement_income_plan_id
+        elif config.scenario_id:
+            target_type = 'scenario'
+            target_id = config.scenario_id
+        return {
+            'config_id': config.growth_rate_id,
+            'type': config.configuration_type,
+            'growth_rate': config.growth_rate,
+            'start_year': config.start_year,
+            'end_year': config.end_year,
+            'target_type': target_type,
+            'target_id': target_id,
+            'is_stepwise': config.configuration_type == 'STEPWISE'
+        }
+    def get_applicable_rate(
+        self,
+        year: int,
+        target_type: str,
+        target_id: int,
+        default_rate: float
+    ) -> float:
+        configs = self.get_configurations_for_target(target_type, target_id)
+        for config in configs:
+            if config.start_year <= year and (config.end_year is None or config.end_year >= year):
+                return config.growth_rate
+        return default_rate
+crud\financial\liabilities.py
+py
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete, and_
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ...models import Liability, LiabilityCategory, Plan
+from ...utils.money_validations import validate_positive_amount, validate_rate
+class LiabilityCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_liability(
+        self,
+        plan_id: int,
+        liability_category_id: int,
+        liability_name: str,
+        value: float,
+        owner: str,
+        interest_rate: Optional[float] = None,
+        include_in_nest_egg: bool = True
+    ) -> Liability:
+        stmt = select(Plan).join(LiabilityCategory).where(
+            and_(
+                Plan.plan_id == plan_id,
+                LiabilityCategory.liability_category_id == liability_category_id
+            )
+        )
+        if not self.session.execute(stmt).scalar_one_or_none():
+            raise NoResultFound(f"Plan {plan_id} or category {liability_category_id} not found")
+        validate_positive_amount(value, "liability_value")
+        if interest_rate is not None:
+            validate_rate(interest_rate, "interest_rate")
+        if owner not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        liability = Liability(
+            plan_id=plan_id,
+            liability_category_id=liability_category_id,
+            liability_name=liability_name,
+            value=value,
+            owner=owner,
+            interest_rate=interest_rate,
+            include_in_nest_egg=include_in_nest_egg
+        )
+        try:
+            self.session.add(liability)
+            self.session.commit()
+            return liability
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create liability", orig=e)
+    def get_liability(self, liability_id: int) -> Optional[Liability]:
+        stmt = select(Liability).where(Liability.liability_id == liability_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_plan_liabilities(
+        self, 
+        plan_id: int,
+        category_id: Optional[int] = None
+    ) -> List[Liability]:
+        stmt = select(Liability).where(Liability.plan_id == plan_id)
+        if category_id:
+            stmt = stmt.where(Liability.liability_category_id == category_id)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_liability(
+        self,
+        liability_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[Liability]:
+        if 'value' in update_data:
+            validate_positive_amount(update_data['value'], "liability_value")
+        if 'interest_rate' in update_data and update_data['interest_rate'] is not None:
+            validate_rate(update_data['interest_rate'], "interest_rate")
+        if 'owner' in update_data and update_data['owner'] not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        try:
+            stmt = (
+                update(Liability)
+                .where(Liability.liability_id == liability_id)
+                .values(**update_data)
+                .returning(Liability)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one_or_none()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update liability", orig=e)
+    def delete_liability(self, liability_id: int) -> bool:
+        stmt = delete(Liability).where(Liability.liability_id == liability_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_liability_summary(self, liability_id: int) -> Optional[Dict[str, Any]]:
+        liability = self.get_liability(liability_id)
+        if not liability:
+            return None
+        return {
+            'liability_id': liability.liability_id,
+            'liability_name': liability.liability_name,
+            'category_id': liability.liability_category_id,
+            'value': liability.value,
+            'owner': liability.owner,
+            'interest_rate': liability.interest_rate,
+            'include_in_nest_egg': liability.include_in_nest_egg,
+            'has_interest': liability.interest_rate is not None
+        }
+    def get_total_liabilities(
+        self,
+        plan_id: int,
+        include_in_nest_egg_only: bool = False
+    ) -> float:
+        stmt = select(Liability).where(Liability.plan_id == plan_id)
+        if include_in_nest_egg_only:
+            stmt = stmt.where(Liability.include_in_nest_egg == True)
+        liabilities = self.session.execute(stmt).scalars().all()
+        return sum(liability.value for liability in liabilities)
+crud\financial\retirement.py
+py
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ...models import RetirementIncomePlan, Plan, GrowthRateConfiguration
+from ...utils.money_validations import validate_positive_amount, validate_rate
+from ...utils.time_validations import validate_age_sequence
+class RetirementIncomeCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_retirement_income(
+        self,
+        plan_id: int,
+        name: str,
+        owner: str,
+        annual_income: float,
+        start_age: int,
+        end_age: Optional[int] = None,
+        include_in_nest_egg: bool = True,
+        apply_inflation: bool = False,
+        growth_config: Optional[Dict[str, Any]] = None
+    ) -> RetirementIncomePlan:
+        stmt = select(Plan).where(Plan.plan_id == plan_id)
+        plan = self.session.execute(stmt).scalar_one_or_none()
+        if not plan:
+            raise NoResultFound(f"Plan {plan_id} not found")
+        validate_positive_amount(annual_income, "annual_income")
+        if owner not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        if end_age is not None:
+            if not validate_age_sequence(start_age, start_age, end_age):
+                raise ValueError("Start age must be before or equal to end age")
+        income_plan = RetirementIncomePlan(
+            plan_id=plan_id,
+            name=name,
+            owner=owner,
+            annual_income=annual_income,
+            start_age=start_age,
+            end_age=end_age,
+            include_in_nest_egg=include_in_nest_egg,
+            apply_inflation=apply_inflation
+        )
+        try:
+            self.session.add(income_plan)
+            self.session.flush()  # Get income_plan_id without committing
+            if growth_config:
+                self._add_growth_configuration(income_plan.income_plan_id, growth_config)
+            self.session.commit()
+            return income_plan
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create retirement income plan", orig=e)
+    def get_retirement_income(
+        self,
+        income_id: int,
+        include_growth_config: bool = False
+    ) -> Optional[RetirementIncomePlan]:
+        stmt = select(RetirementIncomePlan).where(
+            RetirementIncomePlan.income_plan_id == income_id
+        )
+        if include_growth_config:
+            stmt = stmt.options(joinedload(RetirementIncomePlan.growth_rates))
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_plan_retirement_income(
+        self,
+        plan_id: int,
+        owner: Optional[str] = None
+    ) -> List[RetirementIncomePlan]:
+        stmt = select(RetirementIncomePlan).where(
+            RetirementIncomePlan.plan_id == plan_id
+        )
+        if owner:
+            stmt = stmt.where(RetirementIncomePlan.owner == owner)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_retirement_income(
+        self,
+        income_id: int,
+        update_data: Dict[str, Any],
+        growth_config: Optional[Dict[str, Any]] = None
+    ) -> Optional[RetirementIncomePlan]:
+        if 'annual_income' in update_data:
+            validate_positive_amount(update_data['annual_income'], "annual_income")
+        if 'owner' in update_data and update_data['owner'] not in ['person1', 'person2', 'joint']:
+            raise ValueError("Invalid owner value")
+        if 'start_age' in update_data or 'end_age' in update_data:
+            current_income = self.get_retirement_income(income_id)
+            if not current_income:
+                return None
+            start_age = update_data.get('start_age', current_income.start_age)
+            end_age = update_data.get('end_age', current_income.end_age)
+            if end_age is not None and not validate_age_sequence(start_age, start_age, end_age):
+                raise ValueError("Start age must be before or equal to end age")
+        try:
+            stmt = (
+                update(RetirementIncomePlan)
+                .where(RetirementIncomePlan.income_plan_id == income_id)
+                .values(**update_data)
+                .returning(RetirementIncomePlan)
+            )
+            result = self.session.execute(stmt)
+            income_plan = result.scalar_one_or_none()
+            if not income_plan:
+                return None
+            if growth_config:
+                stmt = delete(GrowthRateConfiguration).where(
+                    GrowthRateConfiguration.retirement_income_plan_id == income_id
+                )
+                self.session.execute(stmt)
+                self._add_growth_configuration(income_id, growth_config)
+            self.session.commit()
+            return income_plan
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update retirement income plan", orig=e)
+    def delete_retirement_income(self, income_id: int) -> bool:
+        stmt = delete(RetirementIncomePlan).where(
+            RetirementIncomePlan.income_plan_id == income_id
+        )
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def _add_growth_configuration(
+        self,
+        income_id: int,
+        config: Dict[str, Any]
+    ) -> None:
+        validate_rate(config.get('growth_rate'), "growth_rate")
+        growth_config = GrowthRateConfiguration(
+            retirement_income_plan_id=income_id,
+            configuration_type='OVERRIDE',
+            start_year=config.get('start_year'),
+            end_year=config.get('end_year'),
+            growth_rate=config.get('growth_rate')
+        )
+        self.session.add(growth_config)
+    def get_retirement_income_summary(
+        self,
+        income_id: int,
+        include_years: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        income = self.get_retirement_income(income_id, include_growth_config=True)
+        if not income:
+            return None
+        summary = {
+            'income_id': income.income_plan_id,
+            'name': income.name,
+            'owner': income.owner,
+            'annual_income': income.annual_income,
+            'start_age': income.start_age,
+            'end_age': income.end_age,
+            'include_in_nest_egg': income.include_in_nest_egg,
+            'apply_inflation': income.apply_inflation,
+            'has_growth_rate': bool(income.growth_rates)
+        }
+        if include_years:
+            summary.update({
+                'duration': (income.end_age - income.start_age + 1) if income.end_age else None,
+                'is_lifetime': income.end_age is None
+            })
+        return summary
+    def get_total_retirement_income(
+        self,
+        plan_id: int,
+        age: int,
+        include_in_nest_egg_only: bool = False
+    ) -> float:
+        stmt = select(RetirementIncomePlan).where(
+            RetirementIncomePlan.plan_id == plan_id,
+            RetirementIncomePlan.start_age <= age
+        )
+        if include_in_nest_egg_only:
+            stmt = stmt.where(RetirementIncomePlan.include_in_nest_egg == True)
+        income_plans = self.session.execute(stmt).scalars().all()
+        total = 0.0
+        for plan in income_plans:
+            if plan.end_age is None or plan.end_age >= age:
+                total += plan.annual_income
+        return total
+crud\households.py
+py
+from datetime import date, datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from ..models import Household
+from ..utils.time_validations import validate_dob
+class HouseholdCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_household(
+        self,
+        household_name: str,
+        person1_first_name: str,
+        person1_last_name: str,
+        person1_dob: date,
+        person2_first_name: Optional[str] = None,
+        person2_last_name: Optional[str] = None,
+        person2_dob: Optional[date] = None
+    ) -> Household:
+        if not validate_dob(person1_dob):
+            raise ValueError("Invalid date of birth for person 1")
+        if person2_dob and not validate_dob(person2_dob):
+            raise ValueError("Invalid date of birth for person 2")
+        household = Household(
+            household_name=household_name,
+            person1_first_name=person1_first_name,
+            person1_last_name=person1_last_name,
+            person1_dob=person1_dob,
+            person2_first_name=person2_first_name,
+            person2_last_name=person2_last_name,
+            person2_dob=person2_dob
+        )
+        try:
+            self.session.add(household)
+            self.session.commit()
+            return household
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create household", orig=e)
+    def get_household(self, household_id: int) -> Optional[Household]:
+        stmt = select(Household).where(Household.household_id == household_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_all_households(self) -> List[Household]:
+        stmt = select(Household)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_household(
+        self, 
+        household_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[Household]:
+        if 'person1_dob' in update_data and not validate_dob(update_data['person1_dob']):
+            raise ValueError("Invalid date of birth for person 1")
+        if 'person2_dob' in update_data and update_data['person2_dob'] and not validate_dob(update_data['person2_dob']):
+            raise ValueError("Invalid date of birth for person 2")
+        try:
+            update_data['updated_at'] = datetime.now()
+            stmt = (
+                update(Household)
+                .where(Household.household_id == household_id)
+                .values(**update_data)
+                .returning(Household)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one_or_none()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update household", orig=e)
+    def delete_household(self, household_id: int) -> bool:
+        stmt = delete(Household).where(Household.household_id == household_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_household_summary(self, household_id: int) -> Optional[Dict[str, Any]]:
+        household = self.get_household(household_id)
+        if not household:
+            return None
+        return {
+            'household_id': household.household_id,
+            'household_name': household.household_name,
+            'person1_name': f"{household.person1_first_name} {household.person1_last_name}",
+            'person2_name': f"{household.person2_first_name} {household.person2_last_name}" if household.person2_first_name else None,
+            'plan_count': len(household.plans),
+            'created_at': household.created_at,
+            'updated_at': household.updated_at
+        }
+crud\plans.py
+py
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ..models import Plan, Household, BaseAssumption
+from ..utils.time_validations import validate_projection_timeline
+class PlanCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_plan(
+        self,
+        household_id: int,
+        plan_name: str,
+    ) -> Plan:
+        stmt = select(Household).where(Household.household_id == household_id)
+        if not self.session.execute(stmt).scalar_one_or_none():
+            raise NoResultFound(f"Household {household_id} not found")
+        plan = Plan(
+            household_id=household_id,
+            plan_name=plan_name,
+        )
+        try:
+            self.session.add(plan)
+            self.session.commit()
+            return plan
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create plan", orig=e)
+    def get_plan(self, plan_id: int, include_relationships: bool = False) -> Optional[Plan]:
+        stmt = select(Plan).where(Plan.plan_id == plan_id)
+        if include_relationships:
+            stmt = stmt.options(
+                joinedload(Plan.base_assumptions),
+                joinedload(Plan.scenarios),
+                joinedload(Plan.asset_categories),
+                joinedload(Plan.liability_categories),
+                joinedload(Plan.assets),
+                joinedload(Plan.liabilities),
+                joinedload(Plan.inflows_outflows),
+                joinedload(Plan.retirement_income_plans)
+            )
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_household_plans(self, household_id: int) -> List[Plan]:
+        stmt = select(Plan).where(Plan.household_id == household_id)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_plan(
+        self,
+        plan_id: int,
+        update_data: Dict[str, Any]
+    ) -> Optional[Plan]:
+        try:
+            update_data['updated_at'] = datetime.now()
+            stmt = (
+                update(Plan)
+                .where(Plan.plan_id == plan_id)
+                .values(**update_data)
+                .returning(Plan)
+            )
+            result = self.session.execute(stmt)
+            self.session.commit()
+            return result.scalar_one_or_none()
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update plan", orig=e)
+    def delete_plan(self, plan_id: int) -> bool:
+        stmt = delete(Plan).where(Plan.plan_id == plan_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_plan_summary(self, plan_id: int) -> Optional[Dict[str, Any]]:
+        plan = self.get_plan(plan_id, include_relationships=True)
+        if not plan:
+            return None
+        return {
+            'plan_id': plan.plan_id,
+            'plan_name': plan.plan_name,
+            'household_id': plan.household_id,
+            'scenario_count': len(plan.scenarios),
+            'asset_count': len(plan.assets),
+            'liability_count': len(plan.liabilities),
+            'cash_flow_count': len(plan.inflows_outflows),
+            'retirement_income_count': len(plan.retirement_income_plans),
+            'has_base_assumptions': plan.base_assumptions is not None,
+            'created_at': plan.created_at,
+            'updated_at': plan.updated_at
+        }
+    def validate_plan_timeline(self, plan_id: int) -> bool:
+        plan = self.get_plan(plan_id)
+        if not plan or not plan.base_assumptions:
+            return False
+        start_year = datetime.now().year  # Plan always starts in current year
+        retirement_year = plan.base_assumptions.retirement_age_1  # Using person1's retirement age
+        end_year = plan.base_assumptions.final_age_1  # Using person1's final age
+        return validate_projection_timeline(start_year, retirement_year, end_year)
+crud\scenarios.py
+py
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from ..models import (
+    Scenario, 
+    ScenarioAssumption, 
+    ScenarioOverride,
+    Plan
+)
+from ..utils.money_validations import validate_positive_amount, validate_rate
+class ScenarioCRUD:
+    def __init__(self, session: Session):
+        self.session = session
+    def create_scenario(
+        self,
+        plan_id: int,
+        scenario_name: str,
+        scenario_color: Optional[str] = None,
+        assumptions: Optional[Dict[str, Any]] = None,
+    ) -> Scenario:
+        stmt = select(Plan).where(Plan.plan_id == plan_id)
+        if not self.session.execute(stmt).scalar_one_or_none():
+            raise NoResultFound(f"Plan {plan_id} not found")
+        scenario = Scenario(
+            plan_id=plan_id,
+            scenario_name=scenario_name,
+            scenario_color=scenario_color
+        )
+        try:
+            self.session.add(scenario)
+            self.session.flush()  # Get scenario_id without committing
+            if assumptions:
+                if 'default_growth_rate' in assumptions:
+                    validate_rate(assumptions['default_growth_rate'], "default_growth_rate")
+                if 'inflation_rate' in assumptions:
+                    validate_rate(assumptions['inflation_rate'], "inflation_rate")
+                if 'annual_retirement_spending' in assumptions:
+                    validate_positive_amount(
+                        assumptions['annual_retirement_spending'], 
+                        "annual_retirement_spending"
+                    )
+                scenario_assumptions = ScenarioAssumption(
+                    scenario_id=scenario.scenario_id,
+                    **assumptions
+                )
+                self.session.add(scenario_assumptions)
+            self.session.commit()
+            return scenario
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create scenario", orig=e)
+    def get_scenario(
+        self, 
+        scenario_id: int, 
+        include_assumptions: bool = False,
+        include_overrides: bool = False
+    ) -> Optional[Scenario]:
+        stmt = select(Scenario).where(Scenario.scenario_id == scenario_id)
+        if include_assumptions:
+            stmt = stmt.options(joinedload(Scenario.assumptions))
+        if include_overrides:
+            stmt = stmt.options(joinedload(Scenario.overrides))
+        return self.session.execute(stmt).scalar_one_or_none()
+    def get_plan_scenarios(self, plan_id: int) -> List[Scenario]:
+        stmt = select(Scenario).where(Scenario.plan_id == plan_id)
+        return list(self.session.execute(stmt).scalars().all())
+    def update_scenario(
+        self,
+        scenario_id: int,
+        update_data: Dict[str, Any],
+        assumption_updates: Optional[Dict[str, Any]] = None
+    ) -> Optional[Scenario]:
+        try:
+            stmt = (
+                update(Scenario)
+                .where(Scenario.scenario_id == scenario_id)
+                .values(**update_data)
+                .returning(Scenario)
+            )
+            result = self.session.execute(stmt)
+            scenario = result.scalar_one_or_none()
+            if not scenario:
+                return None
+            if assumption_updates:
+                if 'default_growth_rate' in assumption_updates:
+                    validate_rate(assumption_updates['default_growth_rate'], "default_growth_rate")
+                if 'inflation_rate' in assumption_updates:
+                    validate_rate(assumption_updates['inflation_rate'], "inflation_rate")
+                if 'annual_retirement_spending' in assumption_updates:
+                    validate_positive_amount(
+                        assumption_updates['annual_retirement_spending'], 
+                        "annual_retirement_spending"
+                    )
+                stmt = (
+                    update(ScenarioAssumption)
+                    .where(ScenarioAssumption.scenario_id == scenario_id)
+                    .values(**assumption_updates)
+                )
+                self.session.execute(stmt)
+            self.session.commit()
+            return scenario
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to update scenario", orig=e)
+    def add_override(
+        self,
+        scenario_id: int,
+        override_field: str,
+        override_value: str,
+        asset_id: Optional[int] = None,
+        liability_id: Optional[int] = None,
+        inflow_outflow_id: Optional[int] = None,
+        retirement_income_plan_id: Optional[int] = None
+    ) -> ScenarioOverride:
+        if not any([asset_id, liability_id, inflow_outflow_id, retirement_income_plan_id]):
+            raise ValueError("Must provide a target for the override")
+        override = ScenarioOverride(
+            scenario_id=scenario_id,
+            override_field=override_field,
+            override_value=override_value,
+            asset_id=asset_id,
+            liability_id=liability_id,
+            inflow_outflow_id=inflow_outflow_id,
+            retirement_income_plan_id=retirement_income_plan_id
+        )
+        try:
+            self.session.add(override)
+            self.session.commit()
+            return override
+        except IntegrityError as e:
+            self.session.rollback()
+            raise IntegrityError("Failed to create override", orig=e)
+    def remove_override(self, override_id: int) -> bool:
+        stmt = delete(ScenarioOverride).where(ScenarioOverride.override_id == override_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def delete_scenario(self, scenario_id: int) -> bool:
+        stmt = delete(Scenario).where(Scenario.scenario_id == scenario_id)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount > 0
+    def get_scenario_summary(self, scenario_id: int) -> Optional[Dict[str, Any]]:
+        scenario = self.get_scenario(scenario_id, include_assumptions=True, include_overrides=True)
+        if not scenario:
+            return None
+        override_counts = {
+            'asset_overrides': sum(1 for o in scenario.overrides if o.asset_id is not None),
+            'liability_overrides': sum(1 for o in scenario.overrides if o.liability_id is not None),
+            'cash_flow_overrides': sum(1 for o in scenario.overrides if o.inflow_outflow_id is not None),
+            'retirement_income_overrides': sum(1 for o in scenario.overrides if o.retirement_income_plan_id is not None)
+        }
+        return {
+            'scenario_id': scenario.scenario_id,
+            'scenario_name': scenario.scenario_name,
+            'plan_id': scenario.plan_id,
+            'has_assumptions': scenario.assumptions is not None,
+            'override_counts': override_counts,
+            'created_at': scenario.created_at
+        }
+models.py
+py
+from datetime import datetime, date
+from typing import Optional, List
+from sqlalchemy import Integer, String, Float, Date, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import AsyncAttrs
+class Base(AsyncAttrs, DeclarativeBase):
+    pass
+class Household(Base):
+    __tablename__ = "households"
+    household_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    household_name: Mapped[str] = mapped_column(Text, nullable=False)
+    person1_first_name: Mapped[str] = mapped_column(Text, nullable=False)
+    person1_last_name: Mapped[str] = mapped_column(Text, nullable=False)
+    person1_dob: Mapped[date] = mapped_column(Date, nullable=False)
+    person2_first_name: Mapped[Optional[str]] = mapped_column(Text)
+    person2_last_name: Mapped[Optional[str]] = mapped_column(Text)
+    person2_dob: Mapped[Optional[date]] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    plans: Mapped[List["Plan"]] = relationship(back_populates="household", cascade="all, delete-orphan")
+class Plan(Base):
+    __tablename__ = "plans"
+    plan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    household_id: Mapped[int] = mapped_column(ForeignKey("households.household_id", ondelete="CASCADE"), nullable=False)
+    plan_name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    household: Mapped["Household"] = relationship("Household", back_populates="plans")
+    base_assumptions: Mapped[Optional["BaseAssumption"]] = relationship(
+        back_populates="plan", 
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    scenarios: Mapped[List["Scenario"]] = relationship(
+        back_populates="plan",
+        cascade="all, delete-orphan"
+    )
+    asset_categories: Mapped[List["AssetCategory"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+    liability_categories: Mapped[List["LiabilityCategory"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+    assets: Mapped[List["Asset"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+    liabilities: Mapped[List["Liability"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+    inflows_outflows: Mapped[List["InflowOutflow"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+    retirement_income_plans: Mapped[List["RetirementIncomePlan"]] = relationship(
+        back_populates="plan", 
+        cascade="all, delete-orphan"
+    )
+class BaseAssumption(Base):
+    __tablename__ = "base_assumptions"
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), primary_key=True)
+    retirement_age_1: Mapped[Optional[int]] = mapped_column(Integer)
+    retirement_age_2: Mapped[Optional[int]] = mapped_column(Integer)
+    final_age_1: Mapped[Optional[int]] = mapped_column(Integer)
+    final_age_2: Mapped[Optional[int]] = mapped_column(Integer)
+    final_age_selector: Mapped[Optional[int]] = mapped_column(Integer)
+    default_growth_rate: Mapped[Optional[float]] = mapped_column(Float)
+    inflation_rate: Mapped[Optional[float]] = mapped_column(Float)
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="base_assumptions")
+class Scenario(Base):
+    __tablename__ = "scenarios"
+    scenario_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    scenario_name: Mapped[str] = mapped_column(Text, nullable=False)
+    scenario_color: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="scenarios")
+    assumptions: Mapped[Optional["ScenarioAssumption"]] = relationship(
+        back_populates="scenario", 
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    overrides: Mapped[List["ScenarioOverride"]] = relationship(
+        back_populates="scenario", 
+        cascade="all, delete-orphan"
+    )
+    growth_rates: Mapped[List["GrowthRateConfiguration"]] = relationship(
+        back_populates="scenario", 
+        cascade="all, delete-orphan"
+    )
+class ScenarioAssumption(Base):
+    __tablename__ = "scenario_assumptions"
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("scenarios.scenario_id", ondelete="CASCADE"), primary_key=True)
+    retirement_age_1: Mapped[Optional[int]] = mapped_column(Integer)
+    retirement_age_2: Mapped[Optional[int]] = mapped_column(Integer)
+    default_growth_rate: Mapped[Optional[float]] = mapped_column(Float)
+    inflation_rate: Mapped[Optional[float]] = mapped_column(Float)
+    annual_retirement_spending: Mapped[Optional[float]] = mapped_column(Float)
+    scenario: Mapped["Scenario"] = relationship("Scenario", back_populates="assumptions")
+class ScenarioOverride(Base):
+    __tablename__ = "scenario_overrides"
+    override_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("scenarios.scenario_id", ondelete="CASCADE"), nullable=False)
+    asset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assets.asset_id", ondelete="CASCADE"))
+    liability_id: Mapped[Optional[int]] = mapped_column(ForeignKey("liabilities.liability_id", ondelete="CASCADE"))
+    inflow_outflow_id: Mapped[Optional[int]] = mapped_column(ForeignKey("inflows_outflows.inflow_outflow_id", ondelete="CASCADE"))
+    retirement_income_plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("retirement_income_plans.income_plan_id", ondelete="CASCADE"))
+    override_field: Mapped[str] = mapped_column(Text, nullable=False)
+    override_value: Mapped[str] = mapped_column(Text, nullable=False)
+    scenario = relationship("Scenario", back_populates="overrides")
+    asset = relationship("Asset", back_populates="overrides")
+    liability = relationship("Liability", back_populates="overrides")
+    inflow_outflow = relationship("InflowOutflow", back_populates="overrides")
+    retirement_income_plan = relationship("RetirementIncomePlan", back_populates="overrides")
+class AssetCategory(Base):
+    __tablename__ = "asset_categories"
+    asset_category_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    category_name: Mapped[str] = mapped_column(Text, nullable=False)
+    category_order: Mapped[int] = mapped_column(Integer, default=0)
+    plan = relationship("Plan", back_populates="asset_categories")
+    assets = relationship("Asset", back_populates="category")
+class Asset(Base):
+    __tablename__ = "assets"
+    asset_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    asset_category_id: Mapped[int] = mapped_column(ForeignKey("asset_categories.asset_category_id", ondelete="CASCADE"), nullable=False)
+    asset_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
+    plan = relationship("Plan", back_populates="assets")
+    category = relationship("AssetCategory", back_populates="assets")
+    overrides = relationship("ScenarioOverride", back_populates="asset")
+    growth_rates = relationship("GrowthRateConfiguration", back_populates="asset")
+class LiabilityCategory(Base):
+    __tablename__ = "liability_categories"
+    liability_category_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    category_name: Mapped[str] = mapped_column(Text, nullable=False)
+    category_order: Mapped[int] = mapped_column(Integer, default=0)
+    plan = relationship("Plan", back_populates="liability_categories")
+    liabilities = relationship("Liability", back_populates="category")
+class Liability(Base):
+    __tablename__ = "liabilities"
+    liability_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    liability_category_id: Mapped[int] = mapped_column(ForeignKey("liability_categories.liability_category_id", ondelete="CASCADE"), nullable=False)
+    liability_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    interest_rate: Mapped[Optional[float]] = mapped_column(Float)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
+    plan = relationship("Plan", back_populates="liabilities")
+    category = relationship("LiabilityCategory", back_populates="liabilities")
+    overrides = relationship("ScenarioOverride", back_populates="liability")
+class InflowOutflow(Base):
+    __tablename__ = "inflows_outflows"
+    inflow_outflow_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    type: Mapped[str] = mapped_column(Text, nullable=False)  # 'inflow' or 'outflow'
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
+    annual_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    start_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer)
+    apply_inflation: Mapped[bool] = mapped_column(Boolean, default=False)
+    plan = relationship("Plan", back_populates="inflows_outflows")
+    overrides = relationship("ScenarioOverride", back_populates="inflow_outflow")
+class RetirementIncomePlan(Base):
+    __tablename__ = "retirement_income_plans"
+    income_plan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.plan_id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str] = mapped_column(Text, nullable=False)  # 'person1', 'person2', or 'joint'
+    annual_income: Mapped[float] = mapped_column(Float, nullable=False)
+    start_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_age: Mapped[Optional[int]] = mapped_column(Integer)
+    include_in_nest_egg: Mapped[bool] = mapped_column(Boolean, default=True)
+    apply_inflation: Mapped[bool] = mapped_column(Boolean, default=False)
+    plan = relationship("Plan", back_populates="retirement_income_plans")
+    overrides = relationship("ScenarioOverride", back_populates="retirement_income_plan")
+    growth_rates = relationship("GrowthRateConfiguration", back_populates="retirement_income_plan")
+class GrowthRateConfiguration(Base):
+    __tablename__ = "growth_rate_configurations"
+    growth_rate_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assets.asset_id", ondelete="CASCADE"))
+    retirement_income_plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("retirement_income_plans.income_plan_id", ondelete="CASCADE"))
+    scenario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenarios.scenario_id", ondelete="CASCADE"))
+    configuration_type: Mapped[str] = mapped_column(Text, nullable=False)  # 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
+    start_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer)
+    growth_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    asset = relationship("Asset", back_populates="growth_rates")
+    retirement_income_plan = relationship("RetirementIncomePlan", back_populates="growth_rates")
+    scenario = relationship("Scenario", back_populates="growth_rates")
+from .connection import engine
+Base.metadata.create_all(bind=engine)
+tests\__init__.py
+py
+calculations_constants.py
+```py
+# backend/database_operations/utils/calculations_constants.py
+```
+
+money_utils.py
+```py
+def to_decimal(amount: Union[float, str, Decimal]) -> Decimal:
+    """Convert float/string to Decimal with standardized precision handling. Handles floating point precision issues by rounding to 8 decimal places."""
+def to_float(amount: Decimal) -> float:
+    """Convert Decimal to float with standardized 2 decimal place rounding for calculation results."""
+def apply_annual_compound_rate(principal: Decimal, rate: Decimal) -> Decimal:
+    """Apply annual compound rate following the core principle that all events occur at year boundaries. Growth compounds annually."""
+def apply_annual_inflation(amount: Decimal, inflation_rate: Decimal) -> Decimal:
+    """Apply annual inflation adjustment. Inflation adjustments compound annually and are applied at the start of each year."""
+```
+
+time_utils.py
+```py
+def get_start_year_from_dob(dob: date, plan_creation_year: int) -> int:
+    """Returns the start year for projections based on DOB and when plan was created."""
+def get_age_at_year(dob: date, target_year: int) -> int:
+    """Returns the age a person will be in a specific year."""
+def get_year_for_age(dob: date, target_age: int) -> int:
+    """Returns the year when a person will reach a specific age."""
+def create_age_year_mapping(dob: date, start_year: int, end_year: int) -> Dict[int, int]:
+    """Creates a dictionary mapping ages to years for the projection period."""
+def create_year_age_mapping(dob: date, start_year: int, end_year: int) -> Dict[int, int]:
+    """Creates a dictionary mapping years to ages for the projection period."""
+def get_retirement_year(dob: date, retirement_age: int) -> int:
+    """Returns the year when retirement begins based on DOB and retirement age."""
+def get_final_projection_year(dob: date, final_age: int) -> int:
+    """Returns the final year of projections based on DOB and final age."""
+```
+
+validation_utils.py
+```py
+# Supporting evidence from documentation:
+# md
+# ## Core Validations
+# 1. Date of birth must be a valid past date.  
+# 2. Retirement year must be after the start year.  
+# 3. End year must be after retirement year.  
+# 4. Start year must be before end year for inflows/outflows.  
+# 5. Scenario overrides cannot create invalid timelines.  
+# 6. Stepwise growth periods must be in chronological order and not overlap.
+from datetime import date
+from typing import List, Tuple, Dict
+def validate_projection_timeline(start_year: int, retirement_year: int, end_year: int) -> bool:
+    """Validates the core timeline follows: start_year < retirement_year < end_year."""
+def validate_dob(dob: date) -> bool:
+    """Validates DOB is a past date and within reasonable bounds."""
+def validate_retirement_age(retirement_age: int) -> bool:
+    """Validates retirement age is within reasonable bounds (e.g., 45-75)."""
+def validate_final_age(final_age: int) -> bool:
+    """Validates final age is within reasonable bounds (e.g., 70-100)."""
+def is_within_projection_period(year: int, start_year: int, end_year: int) -> bool:
+    """Checks if a given year falls within the projection period."""
+def validate_stepwise_periods(periods: List[Tuple[int, int]]) -> bool:
+    """Validates stepwise growth periods don't overlap and are in chronological order."""
+def validate_age_sequence(start_age: int, retirement_age: int, final_age: int) -> bool:
+    """Validates age progression follows: start_age < retirement_age < final_age."""
+def validate_positive_amount(amount: float, field_name: str) -> None:
+    """Validate financial amounts are positive values. Required for: assets, liabilities, scheduled inflows, scheduled outflows, retirement income, and retirement spending."""
+def validate_rate(rate: float, field_name: str) -> None:
+    """Validate growth rate, inflation rate, or interest rate is numeric and within valid bounds. Can be negative as per core validation rules."""
+def validate_stepwise_growth_config(periods: List[Tuple[int, float]], field_name: str) -> None:
+    """Validate stepwise growth periods are in chronological order and don't overlap. Required for asset-specific growth rate configurations."""
+"""
+These were moved from the prior growth_validation.py file to this file.
+"""
+def validate_growth_config_type(config_type: str) -> None:
+    """Validate growth configuration type is one of: DEFAULT, OVERRIDE, or STEPWISE."""
+def validate_growth_period_boundaries(periods: List[Dict], start_year: int, end_year: int) -> None:
+    """Validate growth periods fall within overall projection timeline."""
+def validate_growth_period_sequence(periods: List[Dict]) -> None:
+    """Validate growth periods are sequential and non-overlapping."""
+```

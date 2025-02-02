@@ -17,17 +17,20 @@ Clean handling of growth rate configuration updates
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
+from decimal import Decimal
 from sqlalchemy import select, update, delete, and_
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import Asset, AssetCategory, GrowthRateConfiguration, Plan
-from ...utils.money_validations import (
+from ...validation.money_validation import (
     validate_positive_amount,
     validate_rate,
-    validate_stepwise_growth_config
+    validate_stepwise_growth_config,
+    validate_owner
 )
+from ...utils.money_utils import to_decimal, to_float
 
 class AssetCRUD:
     """CRUD operations for asset and growth rate management."""
@@ -40,7 +43,7 @@ class AssetCRUD:
         plan_id: int,
         asset_category_id: int,
         asset_name: str,
-        value: float,
+        value: Union[float, str, Decimal],
         owner: str,
         include_in_nest_egg: bool = True,
         growth_config: Optional[Dict[str, Any]] = None
@@ -75,17 +78,22 @@ class AssetCRUD:
         if not self.session.execute(stmt).scalar_one_or_none():
             raise NoResultFound(f"Plan {plan_id} or category {asset_category_id} not found")
 
+        # Convert to Decimal for validation
+        decimal_value = to_decimal(value)
+        
         # Validate input
-        validate_positive_amount(value, "asset_value")
-        if owner not in ['person1', 'person2', 'joint']:
-            raise ValueError("Invalid owner value")
+        validate_positive_amount(decimal_value, "asset_value")
+        validate_owner(owner, "owner")
+
+        # Convert to float for DB storage
+        db_value = to_float(decimal_value)
 
         # Create asset instance
         asset = Asset(
             plan_id=plan_id,
             asset_category_id=asset_category_id,
             asset_name=asset_name,
-            value=value,
+            value=db_value,
             owner=owner,
             include_in_nest_egg=include_in_nest_egg
         )
@@ -170,13 +178,15 @@ class AssetCRUD:
             ValueError: If validation fails
             IntegrityError: If database constraint violated
         """
-        # Validate value if included in update
+        # Handle value conversion and validation if present
         if 'value' in update_data:
-            validate_positive_amount(update_data['value'], "asset_value")
+            decimal_value = to_decimal(update_data['value'])
+            validate_positive_amount(decimal_value, "asset_value")
+            update_data['value'] = to_float(decimal_value)
 
         # Validate owner if included in update
-        if 'owner' in update_data and update_data['owner'] not in ['person1', 'person2', 'joint']:
-            raise ValueError("Invalid owner value")
+        if 'owner' in update_data:
+            validate_owner(update_data['owner'], "owner")
 
         try:
             # Update asset
@@ -251,24 +261,26 @@ class AssetCRUD:
             
             # Create configuration for each period
             for period in periods:
-                validate_rate(period['growth_rate'], "growth_rate")
+                rate_decimal = to_decimal(period['growth_rate'])
+                validate_rate(rate_decimal, "growth_rate")
                 growth_config = GrowthRateConfiguration(
                     asset_id=asset_id,
                     configuration_type='STEPWISE',
                     start_year=period['start_year'],
                     end_year=period['end_year'],
-                    growth_rate=period['growth_rate']
+                    growth_rate=to_float(rate_decimal)
                 )
                 self.session.add(growth_config)
         else:
             # Simple override configuration
-            validate_rate(config.get('growth_rate'), "growth_rate")
+            rate_decimal = to_decimal(config.get('growth_rate'))
+            validate_rate(rate_decimal, "growth_rate")
             growth_config = GrowthRateConfiguration(
                 asset_id=asset_id,
                 configuration_type=config_type,
                 start_year=config.get('start_year'),
                 end_year=config.get('end_year'),
-                growth_rate=config.get('growth_rate')
+                growth_rate=to_float(rate_decimal)
             )
             self.session.add(growth_config)
 

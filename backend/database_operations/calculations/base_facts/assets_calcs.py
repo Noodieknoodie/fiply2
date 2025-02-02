@@ -8,12 +8,10 @@
   3. Stepwise: Multiple rates over time periods (start year / end year)  
   4. Gaps in stepwise fall to default  
 - Optional inflation toggle
-
 ## Growth Rate System
 - Assets can have default, fixed, or stepwise growth rates
 - Stepwise: Multiple rates over time periods
 - Gaps in stepwise fall to default
-
 This implementation:
 1. Handles the three types of growth rates (default, override, stepwise)
 2. Properly falls back to default rate when needed
@@ -22,17 +20,23 @@ This implementation:
 5. Provides detailed calculation metadata
 6. Validates configurations and prevents overlapping periods
 """
-
-
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Dict, Optional
 from datetime import date
-
 from ...models import Asset, GrowthRateConfiguration
-from ...utils.money_utils import to_decimal, apply_annual_compound_rate
-
-
+from ...utils.money_utils import (
+    to_decimal, 
+    apply_annual_compound_rate,
+    combine_amounts,
+    round_to_currency
+)
+from ...validation.money_validation import validate_positive_amount, validate_rate
+from ...validation.growth_validation import (
+    validate_growth_config_type,
+    validate_stepwise_periods,
+    validate_rate_bounds
+)
 @dataclass
 class AssetFact:
     """Core asset data including value and growth configuration."""
@@ -43,7 +47,6 @@ class AssetFact:
     growth_configs: List[GrowthRateConfiguration]
     owner: str
     name: str
-
 @dataclass
 class AssetCalculationResult:
     """Results container for asset calculations."""
@@ -55,10 +58,8 @@ class AssetCalculationResult:
     growth_amount: Decimal
     included_in_nest_egg: bool
     metadata: Dict
-
 class AssetCalculator:
     """Handles asset value calculations with growth rate system."""
-    
     def calculate_asset_value(
         self,
         asset: AssetFact,
@@ -67,6 +68,7 @@ class AssetCalculator:
     ) -> AssetCalculationResult:
         """
         Calculates asset value for a specific year applying appropriate growth.
+        All calculations occur at year boundaries following core principles.
         
         Args:
             asset: Asset data container
@@ -85,7 +87,7 @@ class AssetCalculator:
             default_rate
         )
         
-        # Apply growth
+        # Apply growth at year boundary
         ending_value = apply_annual_compound_rate(
             starting_value,
             growth_rate
@@ -108,7 +110,6 @@ class AssetCalculator:
                 growth_amount
             )
         )
-
     def calculate_multiple_assets(
         self,
         assets: List[AssetFact],
@@ -126,11 +127,13 @@ class AssetCalculator:
         Returns:
             List of calculation results for each asset
         """
+        # Validate inputs before calculation
+        self.validate_asset_facts(assets)
+        
         return [
             self.calculate_asset_value(asset, year, default_rate)
             for asset in assets
         ]
-
     def aggregate_by_category(
         self,
         results: List[AssetCalculationResult]
@@ -144,14 +147,20 @@ class AssetCalculator:
         Returns:
             Dictionary mapping category_id to total value
         """
-        totals = {}
+        totals: Dict[int, Decimal] = {}
+        
         for result in results:
             cat_id = result.category_id
             if cat_id not in totals:
                 totals[cat_id] = Decimal('0')
-            totals[cat_id] += result.ending_value
+            
+            # Use combine_amounts for precision
+            totals[cat_id] = combine_amounts([
+                totals[cat_id],
+                result.ending_value
+            ])
+            
         return totals
-
     def calculate_nest_egg_value(
         self,
         results: List[AssetCalculationResult]
@@ -165,12 +174,12 @@ class AssetCalculator:
         Returns:
             Total value of retirement portfolio assets
         """
-        return sum(
+        retirement_values = [
             r.ending_value 
             for r in results 
             if r.included_in_nest_egg
-        )
-
+        ]
+        return combine_amounts(retirement_values)
     def _get_applicable_growth_rate(
         self,
         growth_configs: List[GrowthRateConfiguration],
@@ -182,6 +191,8 @@ class AssetCalculator:
         1. Stepwise rate for matching period
         2. Override rate
         3. Default rate
+        
+        All rates are validated for bounds.
         """
         # Sort configs by type priority
         stepwise_configs = [
@@ -199,15 +210,54 @@ class AssetCalculator:
                 config.end_year is None or 
                 config.end_year >= year
             ):
-                return to_decimal(config.growth_rate)
-        
+                rate = to_decimal(config.growth_rate)
+                validate_rate_bounds(rate, "stepwise_growth_rate")
+                return rate
+                
         # Check for simple override
         if override_configs:
-            return to_decimal(override_configs[0].growth_rate)
-        
-        # Fall back to default
+            rate = to_decimal(override_configs[0].growth_rate)
+            validate_rate_bounds(rate, "override_growth_rate")
+            return rate
+            
+        # Validate default rate
+        validate_rate_bounds(default_rate, "default_growth_rate")
         return default_rate
-
+    def validate_asset_facts(self, assets: List[AssetFact]) -> None:
+        """
+        Validates asset inputs before calculations.
+        
+        Args:
+            assets: List of assets to validate
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        for asset in assets:
+            # Validate value
+            validate_positive_amount(asset.value, f"asset_{asset.asset_id}_value")
+            
+            # Validate growth configurations
+            for config in asset.growth_configs:
+                validate_growth_config_type(
+                    config.configuration_type,
+                    f"asset_{asset.asset_id}_growth_type"
+                )
+                
+            # Validate stepwise periods if present
+            stepwise_periods = [
+                {
+                    'start_year': c.start_year,
+                    'end_year': c.end_year
+                }
+                for c in asset.growth_configs
+                if c.configuration_type == 'STEPWISE'
+            ]
+            if stepwise_periods:
+                validate_stepwise_periods(
+                    stepwise_periods,
+                    f"asset_{asset.asset_id}_growth_periods"
+                )
     def _generate_calculation_metadata(
         self,
         asset: AssetFact,
@@ -220,11 +270,13 @@ class AssetCalculator:
             'asset_name': asset.name,
             'owner': asset.owner,
             'year': year,
-            'applied_growth_rate': str(applied_rate),
-            'growth_amount': str(growth_amount),
-            'rate_type': self._determine_rate_type(asset.growth_configs, year)
+            'applied_growth_rate': str(round_to_currency(applied_rate)),
+            'growth_amount': str(round_to_currency(growth_amount)),
+            'rate_type': self._determine_rate_type(
+                asset.growth_configs,
+                year
+            )
         }
-
     def _determine_rate_type(
         self,
         growth_configs: List[GrowthRateConfiguration],
@@ -241,29 +293,3 @@ class AssetCalculator:
             elif config.configuration_type == 'OVERRIDE':
                 return 'OVERRIDE'
         return 'DEFAULT'
-
-    def validate_asset_facts(self, assets: List[AssetFact]) -> None:
-        """Validates asset inputs before calculations."""
-        for asset in assets:
-            if asset.value < 0:
-                raise ValueError(
-                    f"Asset {asset.asset_id} has negative value"
-                )
-            
-            # Validate growth configurations
-            stepwise_periods = [
-                (c.start_year, c.end_year)
-                for c in asset.growth_configs
-                if c.configuration_type == 'STEPWISE'
-            ]
-            
-            # Check for overlapping periods
-            for i, (start1, end1) in enumerate(stepwise_periods):
-                for start2, end2 in stepwise_periods[i+1:]:
-                    if end1 is None or end2 is None:
-                        continue
-                    if not (end1 < start2 or end2 < start1):
-                        raise ValueError(
-                            f"Asset {asset.asset_id} has overlapping growth periods"
-                        )
-

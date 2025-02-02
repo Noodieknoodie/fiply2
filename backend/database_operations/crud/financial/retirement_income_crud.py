@@ -21,12 +21,14 @@ Proper error handling and transaction management
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, update, delete
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import RetirementIncomePlan, Plan, GrowthRateConfiguration
-from ...utils.money_validations import validate_positive_amount, validate_rate
-from ...utils.time_validations import validate_age_sequence
+from ...validation.money_validation import validate_positive_amount, validate_rate
+from ...validation.time_validation import validate_age_sequence
+
+
 
 class RetirementIncomeCRUD:
     """CRUD operations for retirement income plan management."""

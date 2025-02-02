@@ -21,12 +21,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ..models import BaseAssumption, Plan
-from ..utils.time_validations import (
+from ..utils.time_utils import (
     validate_retirement_age,
     validate_final_age,
     validate_age_sequence
 )
-from ..utils.money_validations import validate_rate
+from ..utils.money_utils import validate_rate
+
+
 
 class BaseAssumptionCRUD:
     """CRUD operations for plan base assumptions."""

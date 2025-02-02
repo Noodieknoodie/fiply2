@@ -1,11 +1,5 @@
-fiply2/
-    CURSOR_LESSONS_LEARNED.md
-    CURSOR_LOG.md
-    FIPLI_CORE_LOGIC.md
-    FIPLI_DB_SCHEMA.md
-    FIPLI_FILE_HIERARCHY.md
-    FIPLI_PROJECT_OVERVIEW.md
-    TODO.txt
+FIPLY2/
+    stripcomments.py
 backend/
     requirements.txt
     database_operations/
@@ -23,16 +17,16 @@ backend/
                 liabilities.py
                 retirement_income.py
                 __init__.py
-                base_facts_utils/
-                    cash_flows_helpers.py
-                    liabilities_helpers.py
-                    retirement_income_helpers.py
+                _helpers/
+                    cash_flows.py
+                    liabilities.py
+                    retirement.py
             scenario/
-                scenario_calculator.py
-                scenario_cloner.py
+                calculator.py
+                cloner.py
                 __init__.py
-                scenario_utils/
-                    scenario_calculator_helper.py
+                _helpers/
+                    calculator.py
         crud/
             base_assumptions.py
             households.py
@@ -44,18 +38,30 @@ backend/
                 cash_flows.py
                 growth_rates.py
                 liabilities.py
-                retirement.py
+                retirement_income.py
                 __init__.py
         database/
             fiply2_database.db
             schema.sql
         tests/
-            database_tests/
-            fixtures/
-            util_tests/
         utils/
-            calculations_constants.py
             money_utils.py
             time_utils.py
-            validation_utils.py
             __init__.py
+        validation/
+            growth_validation.py
+            money_validation.py
+            scenario_timeline_validation.py
+            time_validation.py
+CURSOR_JOURNAL/
+    CURSOR_LESSONS_LEARNED.md
+    CURSOR_LOG.md
+docs/
+    FIPLI_CORE_LOGIC.md
+    FIPLI_DB_SCHEMA.md
+    FIPLI_FILE_HIERARCHY.md
+    FIPLI_PROJECT_OVERVIEW.md
+non_code_ignore/
+    strip.txt
+    strip_cleaned.txt
+    TODO.txt

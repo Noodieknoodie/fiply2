@@ -22,7 +22,7 @@ from ..models import (
     ScenarioOverride,
     Plan
 )
-from ..utils.money_validations import validate_positive_amount, validate_rate
+from ..validation.money_validation import validate_positive_amount, validate_rate
 
 class ScenarioCRUD:
     """CRUD operations for scenario management."""

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import Liability, LiabilityCategory, Plan
-from ...utils.money_validations import validate_positive_amount, validate_rate
+from ...validation.money_validation import validate_positive_amount, validate_rate
 
 class LiabilityCRUD:
     """CRUD operations for liability management."""

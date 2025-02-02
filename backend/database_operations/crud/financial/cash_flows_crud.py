@@ -25,11 +25,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import InflowOutflow, Plan
-from ...utils.money_validations import validate_positive_amount
-from ...utils.time_validations import (
+from ...validation.money_validation import validate_positive_amount
+from ...validation.time_validation import (
     validate_projection_timeline,
     is_within_projection_period
 )
+
 
 class CashFlowCRUD:
     """CRUD operations for inflow/outflow management."""

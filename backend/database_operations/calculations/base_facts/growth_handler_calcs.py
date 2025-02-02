@@ -2,8 +2,6 @@
 """
 Moved from the prior assets_helpers.py file to this file.
 """
-
-
 """
 ## Assets
 - Growth handling:  
@@ -12,23 +10,18 @@ Moved from the prior assets_helpers.py file to this file.
   3. Stepwise: Multiple rates over time periods
   4. Gaps in stepwise fall to default
 - Optional inflation toggle
-
 ## Growth Rate System
 - Assets can have default, fixed, or stepwise growth rates
 - Stepwise: Multiple rates over time periods
 - Gaps in stepwise fall to default
 """
-
-
 from decimal import Decimal
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import date
-
 from ...models import GrowthRateConfiguration
 from ...utils.money_utils import to_decimal, apply_annual_compound_rate
-from ...utils.validation_utils import validate_rate
-
+from ...validation.money_validation import validate_rate
 @dataclass
 class GrowthResult:
     """Container for growth calculation results and metadata."""
@@ -38,10 +31,8 @@ class GrowthResult:
     rate_source: str  # 'default', 'override', or 'stepwise'
     period_start: Optional[int] = None  # For stepwise only
     period_end: Optional[int] = None    # For stepwise only
-
 class GrowthRateHandler:
     """Central authority for all asset growth rate calculations."""
-    
     def apply_growth(
         self,
         value: Decimal,
@@ -56,7 +47,6 @@ class GrowthRateHandler:
         rate, source, period = self._get_applicable_rate(growth_configs, year, default_rate)
         final_value = apply_annual_compound_rate(value, rate)
         growth_amount = final_value - value
-        
         return GrowthResult(
             final_value=final_value,
             growth_amount=growth_amount,
@@ -65,7 +55,6 @@ class GrowthRateHandler:
             period_start=period[0] if period else None,
             period_end=period[1] if period else None
         )
-
     def _get_applicable_rate(
         self,
         configs: List[GrowthRateConfiguration],
@@ -74,17 +63,13 @@ class GrowthRateHandler:
     ) -> Tuple[Decimal, str, Optional[Tuple[int, int]]]:
         """Determines applicable growth rate following strict hierarchy."""
         stepwise_configs = [c for c in configs if c.configuration_type == 'STEPWISE']
-        
         for config in stepwise_configs:
             if config.start_year <= year and (config.end_year is None or config.end_year >= year):
                 return to_decimal(config.growth_rate), 'stepwise', (config.start_year, config.end_year)
-        
         override_configs = [c for c in configs if c.configuration_type == 'OVERRIDE']
         if override_configs:
             return to_decimal(override_configs[0].growth_rate), 'override', None
-        
         return default_rate, 'default', None
-
     def validate_stepwise_configurations(self, configs: List[GrowthRateConfiguration]) -> None:
         """Validates stepwise growth configurations don't overlap."""
         sorted_configs = sorted([c for c in configs if c.configuration_type == 'STEPWISE'], key=lambda x: x.start_year)

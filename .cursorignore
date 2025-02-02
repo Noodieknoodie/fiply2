@@ -2,3 +2,4 @@ OLD_README_IGNORE/
 backend/venv/
 generate_schema.py
 gfh.py
+stripcomments.py

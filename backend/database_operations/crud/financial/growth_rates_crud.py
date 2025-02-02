@@ -32,8 +32,8 @@ from ...models import (
     RetirementIncomePlan,
     Scenario
 )
-from ...utils.money_validations import validate_rate
-from ...utils.time_validations import validate_stepwise_periods
+from ...validation.money_validation import validate_rate
+from ...validation.growth_validation import validate_stepwise_periods
 
 class GrowthRateCRUD:
     """CRUD operations for growth rate configuration management."""

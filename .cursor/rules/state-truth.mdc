@@ -1,6 +1,6 @@
 ---
 description: State what you know must be true before coding
-globs: 
+globs: backend/**/*.py
 ---
 # BEFORE CODING:
 

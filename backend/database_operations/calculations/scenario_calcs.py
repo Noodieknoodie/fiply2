@@ -1,4 +1,4 @@
-“””
+"""
 ## Scenarios
 - Clone of base facts
 - Inherits all base facts and base assumptions
@@ -28,22 +28,23 @@ Key features of this implementation:
 4. Clear tracking of override impacts
 5. Maintains base fact integrity
 6. Comprehensive validation
-“””
+"""
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from copy import deepcopy
 
-from ..models import Scenario, ScenarioAssumption, ScenarioOverride
-from ..base_facts.base_facts_calculator import (
+from ...models import Scenario, ScenarioAssumption, ScenarioOverride
+from ..base_facts.base_facts_calcs import (
     BaseFacts,
     YearlyCalculationResult,
     PortfolioValues,
     CashFlowResults,
     IncomeResults
 )
-from ..utils.money_utils import to_decimal, apply_annual_inflation
+from ...utils.money_utils import to_decimal, apply_annual_inflation
+
 
 @dataclass
 class ScenarioFact:
@@ -55,6 +56,7 @@ class ScenarioFact:
     assumption_overrides: Optional[ScenarioAssumption]
     component_overrides: List[ScenarioOverride]
 
+
 @dataclass
 class ScenarioAssumptions:
     """Scenario-specific overrides of base assumptions."""
@@ -62,7 +64,8 @@ class ScenarioAssumptions:
     retirement_age_2: Optional[int]
     default_growth_rate: Optional[Decimal]
     inflation_rate: Optional[Decimal]
-    
+
+
 @dataclass
 class ScenarioCalculationResult:
     """Results container including base and scenario-specific impacts."""
@@ -74,9 +77,10 @@ class ScenarioCalculationResult:
     override_impacts: Dict[str, Decimal]
     metadata: Dict
 
+
 class ScenarioCalculator:
     """Handles scenario calculations with overrides and retirement spending."""
-    
+
     def calculate_scenario_year(
         self,
         scenario: ScenarioFact,
@@ -84,60 +88,28 @@ class ScenarioCalculator:
         base_result: YearlyCalculationResult,
         prior_scenario_result: Optional[ScenarioCalculationResult] = None
     ) -> ScenarioCalculationResult:
-        """
-        Calculates scenario values starting from base fact results.
-        
-        Args:
-            scenario: Scenario data container
-            year: Year to calculate for
-            base_result: Base fact calculation results for the year
-            prior_scenario_result: Previous year's scenario results
-            
-        Returns:
-            Complete scenario calculation results
-        """
-        # Start with a deep copy of base portfolio
+        """Calculates scenario values starting from base fact results."""
         scenario_portfolio = deepcopy(base_result.ending_portfolio)
-        
-        # Apply assumption overrides if any
-        if scenario.assumption_overrides:
-            scenario_portfolio = self._apply_assumption_overrides(
-                scenario_portfolio,
-                scenario.assumption_overrides,
-                year
-            )
-        
-        # Apply component overrides
+
         override_impacts = self._apply_component_overrides(
             scenario_portfolio,
             scenario.component_overrides,
             year
         )
-        
-        # Calculate retirement spending if applicable
-        retirement_spending = Decimal('0')
-        adjusted_spending = Decimal('0')
-        spending_impact = Decimal('0')
-        
+
+        retirement_spending, adjusted_spending, spending_impact = Decimal('0'), Decimal('0'), Decimal('0')
+
         if self._is_retirement_spending_active(scenario, year):
             retirement_spending = scenario.retirement_spending
-            
-            # Always adjust retirement spending for inflation
             years_from_start = year - scenario.base_facts.start_year
             adjusted_spending = apply_annual_inflation(
                 retirement_spending,
                 self._get_inflation_rate(scenario),
                 years_from_start
             )
-            
             spending_impact = adjusted_spending - retirement_spending
-            
-            # Apply spending to portfolio
-            scenario_portfolio = self._apply_retirement_spending(
-                scenario_portfolio,
-                adjusted_spending
-            )
-        
+            scenario_portfolio = self._apply_retirement_spending(scenario_portfolio, adjusted_spending)
+
         return ScenarioCalculationResult(
             base_result=base_result,
             scenario_portfolio=scenario_portfolio,
@@ -153,56 +125,32 @@ class ScenarioCalculator:
             )
         )
 
-    def _apply_assumption_overrides(
-        self,
-        portfolio: PortfolioValues,
-        overrides: ScenarioAssumption,
-        year: int
-    ) -> PortfolioValues:
-        """Applies scenario-specific assumption overrides."""
-        # Apply growth rate override if specified
-        if overrides.default_growth_rate is not None:
-            portfolio = self._recalculate_growth(
-                portfolio,
-                overrides.default_growth_rate,
-                year
-            )
-        
-        return portfolio
-
     def _apply_component_overrides(
         self,
         portfolio: PortfolioValues,
         overrides: List[ScenarioOverride],
         year: int
     ) -> Dict[str, Decimal]:
-        """
-        Applies granular component overrides and tracks their impacts.
-        
-        Returns dictionary mapping override type to total impact amount.
-        """
+        """Applies component overrides and tracks their impacts."""
         impacts = {
             'asset_value': Decimal('0'),
             'liability_value': Decimal('0'),
             'cash_flow': Decimal('0'),
             'retirement_income': Decimal('0')
         }
-        
+
         for override in overrides:
             original_value = self._get_original_value(portfolio, override)
             new_value = to_decimal(override.override_value)
             impact = new_value - original_value
-            
+
             if override.asset_id:
                 impacts['asset_value'] += impact
                 portfolio.asset_values[override.asset_id] = new_value
-                
             elif override.liability_id:
                 impacts['liability_value'] += impact
                 portfolio.liability_values[override.liability_id] = new_value
-                
-            # Handle other override types similarly...
-            
+
         return impacts
 
     def _apply_retirement_spending(
@@ -232,7 +180,7 @@ class ScenarioCalculator:
         scenario: ScenarioFact
     ) -> Decimal:
         """Gets applicable inflation rate considering overrides."""
-        if (scenario.assumption_overrides and 
+        if (scenario.assumption_overrides and
             scenario.assumption_overrides.inflation_rate is not None):
             return scenario.assumption_overrides.inflation_rate
         return to_decimal(scenario.base_facts.base_assumptions.inflation_rate)
@@ -244,21 +192,10 @@ class ScenarioCalculator:
     ) -> Decimal:
         """Retrieves original value for an override target."""
         if override.asset_id:
-            return portfolio.asset_values[override.asset_id]
+            return portfolio.asset_values.get(override.asset_id, Decimal('0'))
         elif override.liability_id:
-            return portfolio.liability_values[override.liability_id]
-        # Handle other override types...
+            return portfolio.liability_values.get(override.liability_id, Decimal('0'))
         return Decimal('0')
-
-    def _recalculate_growth(
-        self,
-        portfolio: PortfolioValues,
-        growth_rate: Decimal,
-        year: int
-    ) -> PortfolioValues:
-        """Recalculates asset growth with overridden rate."""
-        # Implementation would recalculate growth for relevant assets
-        return portfolio
 
     def _update_portfolio_totals(
         self,
@@ -269,7 +206,6 @@ class ScenarioCalculator:
             sum(portfolio.asset_values.values()) -
             sum(portfolio.liability_values.values())
         )
-        # Update other totals...
         return portfolio
 
     def _generate_calculation_metadata(
@@ -283,7 +219,6 @@ class ScenarioCalculator:
         return {
             'scenario_name': scenario.name,
             'year': year,
-            'has_assumption_overrides': scenario.assumption_overrides is not None,
             'override_count': len(scenario.component_overrides),
             'total_override_impact': sum(override_impacts.values()),
             'spending_impact': spending_impact
@@ -294,24 +229,15 @@ class ScenarioCalculator:
         scenario: ScenarioFact
     ) -> None:
         """Validates scenario inputs before calculations."""
-        # Validate retirement spending is positive
         if scenario.retirement_spending < 0:
             raise ValueError("Retirement spending cannot be negative")
-            
-        # Validate assumption overrides
+
         if scenario.assumption_overrides:
-            if (scenario.assumption_overrides.retirement_age_1 and 
-                scenario.assumption_overrides.retirement_age_1 < 0):
+            if scenario.assumption_overrides.retirement_age_1 is not None and scenario.assumption_overrides.retirement_age_1 < 0:
                 raise ValueError("Invalid retirement age override")
-                
-        # Validate component overrides
+
         for override in scenario.component_overrides:
-            if not any([
-                override.asset_id,
-                override.liability_id,
-                override.inflow_outflow_id,
-                override.retirement_income_plan_id
-            ]):
+            if not any([override.asset_id, override.liability_id, override.inflow_outflow_id, override.retirement_income_plan_id]):
                 raise ValueError(f"Override {override.override_id} has no target")
 
     def generate_override_summary(
@@ -325,7 +251,7 @@ class ScenarioCalculator:
             'cash_flow_overrides': 0,
             'retirement_income_overrides': 0
         }
-        
+
         for override in scenario.component_overrides:
             if override.asset_id:
                 summary['asset_overrides'] += 1
@@ -335,5 +261,5 @@ class ScenarioCalculator:
                 summary['cash_flow_overrides'] += 1
             elif override.retirement_income_plan_id:
                 summary['retirement_income_overrides'] += 1
-                
+
         return summary

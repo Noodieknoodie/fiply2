@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ..models import Plan, Household, BaseAssumption
-from ..utils.time_validations import validate_projection_timeline
+from ..validation.scenario_timeline_validation import validate_projection_timeline
 
 class PlanCRUD:
     """CRUD operations for financial plan management."""

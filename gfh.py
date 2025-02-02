@@ -3,7 +3,8 @@ from fnmatch import fnmatch
 
 # Project root is where this script is located
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
-OUTPUT_FILE = os.path.join(PROJECT_ROOT, "FIPLI_FILE_HIERARCHY.md")
+OUTPUT_FILE = os.path.join(PROJECT_ROOT, "docs", "FIPLI_FILE_HIERARCHY.md")
+
 
 # Exclude completely (hardcoded because these are always useless)
 EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv", ".cursor"}

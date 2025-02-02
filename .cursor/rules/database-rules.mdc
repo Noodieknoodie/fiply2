@@ -1,6 +1,10 @@
 ---
+description: Explains what responibilities the sql database has vs the backend (python)
+globs: backend/**/*.py
+---
+---
 description: Explains what responibilities the sql database has vs the backend (python) 
-globs: .py
+globs: *.py
 ---
 ## DATABASE RULES: Database does THE BARE MINIMUM: Store the data, Ensure basic referential integrity (foreign keys), Ensure NOT NULL when required, That's it! 
 
