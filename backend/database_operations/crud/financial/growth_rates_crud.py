@@ -28,7 +28,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ...models import GrowthRateConfiguration, Asset, RetirementIncomePlan, Scenario
 from ...validation.money_validation import validate_rate
-from ...validation.growth_validation import validate_stepwise_periods
+from ...validation.growth_validation import validate_stepwise_periods, validate_growth_config_type
+from ...validation.time_validation import validate_year_not_before_plan_creation
 
 
 class GrowthRateCRUD:
@@ -42,8 +43,7 @@ class GrowthRateCRUD:
                              retirement_income_plan_id: Optional[int] = None,
                              scenario_id: Optional[int] = None) -> GrowthRateConfiguration:
         """Creates a growth rate configuration for an asset, retirement income, or scenario."""
-        if configuration_type not in {"DEFAULT", "OVERRIDE", "STEPWISE"}:
-            raise ValueError("Invalid configuration type")
+        validate_growth_config_type(configuration_type, "configuration_type")
 
         if sum(x is not None for x in [asset_id, retirement_income_plan_id, scenario_id]) != 1:
             raise ValueError("Must specify exactly one target (asset, retirement income, or scenario)")

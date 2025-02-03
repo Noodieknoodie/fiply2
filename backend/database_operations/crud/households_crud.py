@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from ..models import Household
-from ..utils.time_utils import validate_dob
+from ..validation.time_validation import validate_dob
 
 class HouseholdCRUD:
     """Handles CRUD operations for households."""

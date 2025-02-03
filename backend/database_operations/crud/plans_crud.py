@@ -31,7 +31,11 @@ class PlanCRUD:
         if not self.session.execute(select(Household).where(Household.household_id == household_id)).scalar_one_or_none():
             raise NoResultFound(f"Household {household_id} not found")
 
-        plan = Plan(household_id=household_id, plan_name=plan_name)
+        plan = Plan(
+            household_id=household_id, 
+            plan_name=plan_name,
+            plan_creation_year=datetime.now().year
+        )
 
         try:
             self.session.add(plan)

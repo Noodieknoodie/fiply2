@@ -26,7 +26,8 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import RetirementIncomePlan, Plan, GrowthRateConfiguration
 from ...validation.money_validation import validate_positive_amount, validate_rate
-from ...validation.time_validation import validate_age_sequence
+from ...validation.time_validation import validate_positive_age, validate_age_sequence
+from ...utils.time_utils import get_age_in_year
 
 
 class RetirementIncomeCRUD:
@@ -46,8 +47,14 @@ class RetirementIncomeCRUD:
         if owner not in {"person1", "person2", "joint"}:
             raise ValueError("Invalid owner value")
 
-        if end_age is not None and not validate_age_sequence(start_age, start_age, end_age):
-            raise ValueError("Start age must be before or equal to end age")
+        if not validate_positive_age(start_age):
+            raise ValueError("Start age must be positive")
+            
+        if end_age is not None:
+            if not validate_positive_age(end_age):
+                raise ValueError("End age must be positive")
+            if not validate_age_sequence(start_age, start_age, end_age):
+                raise ValueError("Start age must be before or equal to end age")
 
         income_plan = RetirementIncomePlan(
             plan_id=plan_id, name=name, owner=owner, annual_income=annual_income, start_age=start_age,

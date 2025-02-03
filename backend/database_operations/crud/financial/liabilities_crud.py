@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import Liability, LiabilityCategory, Plan
-from ...validation.money_validation import validate_positive_amount, validate_rate
+from ...validation.money_validation import validate_positive_amount, validate_rate, validate_owner
 
 
 class LiabilityCRUD:
@@ -42,8 +42,7 @@ class LiabilityCRUD:
         validate_positive_amount(value, "liability_value")
         if interest_rate is not None:
             validate_rate(interest_rate, "interest_rate")
-        if owner not in {"person1", "person2", "joint"}:
-            raise ValueError("Invalid owner value")
+        validate_owner(owner, "owner")
 
         liability = Liability(
             plan_id=plan_id, liability_category_id=liability_category_id, liability_name=liability_name,

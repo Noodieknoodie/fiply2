@@ -1,8 +1,7 @@
-# FIPLI_FILE_HIERARCHY.md
-
 FIPLY2/
     stripcomments.py
 backend/
+    main.py
     requirements.txt
     database_operations/
         connection.py
@@ -57,4 +56,3 @@ docs/
 non_code_ignore/
     strip.txt
     strip_cleaned.txt
-    TODO.txt

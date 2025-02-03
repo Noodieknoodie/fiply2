@@ -25,7 +25,8 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 from ...models import Asset, AssetCategory, GrowthRateConfiguration, Plan
 from ...validation.money_validation import validate_positive_amount, validate_rate, validate_owner
 from ...utils.money_utils import to_decimal, to_float
-from ...validation.growth_validation import validate_stepwise_periods
+from ...validation.growth_validation import validate_stepwise_periods, validate_growth_config_type
+from ...validation.time_validation import validate_year_not_before_plan_creation
 
 
 class AssetCRUD:
@@ -118,13 +119,12 @@ class AssetCRUD:
             raise ValueError("Plan creation year must be set before configuring growth rates")
 
         config_type = config.get("configuration_type")
-        if config_type not in {"DEFAULT", "OVERRIDE", "STEPWISE"}:
-            raise ValueError("Invalid growth configuration type")
+        validate_growth_config_type(config_type, "configuration_type")
 
         if config_type == "STEPWISE":
             periods = config.get("periods", [])
             for period in periods:
-                if period["start_year"] < plan.plan_creation_year:
+                if not validate_year_not_before_plan_creation(period["start_year"], plan.plan_creation_year):
                     raise ValueError(f"Growth period cannot start before plan creation year {plan.plan_creation_year}")
             validate_stepwise_periods(periods, "growth_periods")
 

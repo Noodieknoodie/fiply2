@@ -1,4 +1,4 @@
-# backend/database_operations/crud/base_assumptions.py
+# backend/database_operations/crud/base_assumptions_crud.py
 """
 Full CRUD operations for base assumptions following SQLAlchemy 2.0 style
 Comprehensive validation:
@@ -22,11 +22,13 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ..models import BaseAssumption, Plan
 from ..validation.time_validation import (
-    validate_retirement_age,
-    validate_final_age,
-    validate_age_sequence
+    validate_positive_age,
+    validate_age_sequence,
+    validate_year_not_before_plan_creation
 )
+from ..utils.time_utils import get_age_in_year
 from ..validation.money_validation import validate_rate
+from ..utils.time_utils import get_start_year, get_retirement_year, get_final_projection_year
 
 
 
@@ -75,21 +77,24 @@ class BaseAssumptionCRUD:
             raise NoResultFound(f"Plan {plan_id} not found")
 
         # Validate retirement and final ages for person 1
-        if not validate_retirement_age(retirement_age_1):
+        if not validate_positive_age(retirement_age_1):
             raise ValueError("Invalid retirement age for person 1")
-        if not validate_final_age(final_age_1):
+        if not validate_positive_age(final_age_1):
             raise ValueError("Invalid final age for person 1")
-        if not validate_age_sequence(plan.household.person1_dob.year, retirement_age_1, final_age_1):
+        
+        current_age = get_age_in_year(plan.household.person1_dob, datetime.now().year)
+        if not validate_age_sequence(current_age, retirement_age_1, final_age_1):
             raise ValueError("Invalid age sequence for person 1")
 
         # Validate person 2 ages if provided
         if retirement_age_2 is not None:
-            if not validate_retirement_age(retirement_age_2):
+            if not validate_positive_age(retirement_age_2):
                 raise ValueError("Invalid retirement age for person 2")
             if final_age_2 is not None:
-                if not validate_final_age(final_age_2):
+                if not validate_positive_age(final_age_2):
                     raise ValueError("Invalid final age for person 2")
-                if not validate_age_sequence(plan.household.person2_dob.year, retirement_age_2, final_age_2):
+                current_age_2 = get_age_in_year(plan.household.person2_dob, datetime.now().year)
+                if not validate_age_sequence(current_age_2, retirement_age_2, final_age_2):
                     raise ValueError("Invalid age sequence for person 2")
 
         # Validate rates
@@ -226,7 +231,6 @@ class BaseAssumptionCRUD:
         Raises:
             NoResultFound: If plan or assumptions not found
         """
-        # Get plan and assumptions with household data
         stmt = (
             select(BaseAssumption, Plan)
             .join(Plan)
@@ -248,10 +252,10 @@ class BaseAssumptionCRUD:
             retirement_age = assumptions.retirement_age_2
             final_age = assumptions.final_age_2
 
-        # Calculate years
-        start_year = datetime.now().year  # Always starts in current year
-        retirement_year = dob.year + retirement_age
-        end_year = dob.year + final_age
+        # Calculate years using new utility functions
+        start_year = get_start_year(plan.plan_creation_year)
+        retirement_year = get_retirement_year(dob, retirement_age)
+        end_year = get_final_projection_year(dob, final_age)
 
         return {
             'start_year': start_year,

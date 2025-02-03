@@ -17,6 +17,8 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ...models import InflowOutflow, Plan
 from ...validation.money_validation import validate_positive_amount
+from ...validation.time_validation import validate_year_not_before_plan_creation
+from ...utils.time_utils import get_years_between
 
 
 class CashFlowCRUD:
@@ -38,11 +40,11 @@ class CashFlowCRUD:
         validate_positive_amount(annual_amount, "annual_amount")
 
         end_year = end_year or start_year
-        if start_year < plan.plan_creation_year:
+        if not validate_year_not_before_plan_creation(start_year, plan.plan_creation_year):
             raise ValueError("Start year cannot be before plan creation year")
         if start_year > end_year:
             raise ValueError("Start year must be before or equal to end year")
-        if end_year - start_year > 30:
+        if get_years_between(start_year, end_year) > 30:
             raise ValueError("Cash flows must be limited duration events")
 
         cash_flow = InflowOutflow(

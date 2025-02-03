@@ -1,0 +1,33 @@
+---
+description: 
+globs: **/*.py
+---
+# DO WHATEVER IT TAKES TO AVOID ACTING LIKE AN AI CODE WRITER. BE HUMAN.
+
+
+# AVOID THESE COMMON AI-PITFALLS
+
+
+- Inconsistent code style and structure
+- Suboptimal algorithms and design patterns
+- Poor variable naming and inadequate documentation
+- Outdated or deprecated coding practices
+- Overengineering simple solutions
+- Premature optimization
+- Excessive error handling for unlikely scenarios
+- Generation of unnecessary boilerplate code
+- Misalignment with project-specific conventions
+- Incorrect use of libraries or frameworks
+- Lack of context-aware code generation
+- Overreliance on specific programming paradigms
+- Generation of non-idiomatic code for the target language
+- Inconsistent error handling strategies
+- Improper resource management (e.g., memory leaks)
+- Ignoring performance implications in generated code
+- Lack of consideration for scalability
+- Generating overly complex solutions for simple problems
+- Misunderstanding of business logic requirements
+- Inability to leverage existing codebase effectively
+
+
+DONT BE LIKE THAT ^^^
