@@ -259,8 +259,8 @@ def test_mixed_growth_periods():
         value = result.final_value
     
     # Verify recovery math is correct
-    # 100k * (1 - 0.15) * (1 + 0.20) = 102k
-    expected = Decimal('100000') * Decimal('0.85') * Decimal('1.20')
+    # 100k * (1 - 0.15) * (1 - 0.15) * (1 + 0.20) * (1 + 0.20)
+    expected = Decimal('100000') * (Decimal('0.85') ** 2) * (Decimal('1.20') ** 2)
     assert abs(value - expected) < Decimal('0.01')
 
 def test_growth_rate_precision():
