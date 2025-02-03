@@ -52,5 +52,3 @@ def get_session() -> Session:
     )
     return SessionLocal()
 
-# Create database and tables on import if they don't exist
-engine = get_engine()

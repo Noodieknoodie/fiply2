@@ -7,20 +7,24 @@ from sqlalchemy.orm import Session, sessionmaker
 from contextlib import contextmanager
 
 from database_operations.models import Base, Household, Plan, BaseAssumption
-from database_operations.connection import get_session, _engine
+from database_operations.connection import get_session
+import database_operations.connection as connection  # Import the module to modify its global
 
 # Override the global engine for tests
 @pytest.fixture(scope="session", autouse=True)
 def test_engine():
     """Create and configure the test database engine."""
+    # Create test engine
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
     
-    # Override the global engine
-    global _engine
-    _engine = engine
+    # Override the global engine in the connection module
+    connection._engine = engine
     
-    return engine
+    yield engine
+    
+    # Cleanup after all tests
+    engine.dispose()
 
 @pytest.fixture
 def db_session(test_engine):
