@@ -21,12 +21,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from ..models import BaseAssumption, Plan
-from ..utils.time_utils import (
+from ..validation.time_validation import (
     validate_retirement_age,
     validate_final_age,
     validate_age_sequence
 )
-from ..utils.money_utils import validate_rate
+from ..validation.money_validation import validate_rate
 
 
 

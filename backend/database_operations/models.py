@@ -256,6 +256,6 @@ class GrowthRateConfiguration(Base):
     retirement_income_plan = relationship("RetirementIncomePlan", back_populates="growth_rates")
     scenario = relationship("Scenario", back_populates="growth_rates")
 
-# Create all tables in the engine
-from .connection import engine
-Base.metadata.create_all(bind=engine)
+def init_tables(engine):
+    """Initialize database tables. Should be called after engine is created."""
+    Base.metadata.create_all(bind=engine)
