@@ -1,5 +1,4 @@
-FIPLY2/
-    stripcomments.py
+fiply2/
 backend/
     main.py
     requirements.txt
@@ -19,6 +18,9 @@ backend/
                 liabilities_calcs.py
                 retirement_income_calcs.py
                 __init__.py
+                base_facts_utils/
+            scenario/
+                scenario_utils/
         crud/
             base_assumptions_crud.py
             households_crud.py
@@ -43,9 +45,12 @@ backend/
             test_retirement_calculations.py
             test_scenario_calculations.py
             test_scenario_creation.py
+            test_timeline_validations.py
             test_time_handeling.py
-            test_ttimeline_validations.py
             __init__.py
+            database_tests/
+            fixtures/
+            util_tests/
         utils/
             money_utils.py
             time_utils.py
@@ -55,3 +60,14 @@ backend/
             money_validation.py
             scenario_timeline_validation.py
             time_validation.py
+IGNORE/
+    compile.py
+    hierarchy.py
+    schema.py
+    stripcomments.py
+    IGNORE/
+        txt_files/
+            backend_combined.txt
+            docs_combined.txt
+            tests_combined.txt
+    txt_files/
