@@ -36,6 +36,16 @@ backend/
             fiply2_database.db
             schema.sql
         tests/
+            conftest.py
+            test_crud_operations.py
+            test_growth_calculations.py
+            test_growth_configurations.py
+            test_retirement_calculations.py
+            test_scenario_calculations.py
+            test_scenario_creation.py
+            test_time_handeling.py
+            test_ttimeline_validations.py
+            __init__.py
         utils/
             money_utils.py
             time_utils.py
@@ -45,14 +55,3 @@ backend/
             money_validation.py
             scenario_timeline_validation.py
             time_validation.py
-CURSOR_JOURNAL/
-    CURSOR_LESSONS_LEARNED.md
-    CURSOR_LOG.md
-docs/
-    FIPLI_CORE_LOGIC.md
-    FIPLI_DB_SCHEMA.md
-    FIPLI_FILE_HIERARCHY.md
-    FIPLI_PROJECT_OVERVIEW.md
-non_code_ignore/
-    strip.txt
-    strip_cleaned.txt

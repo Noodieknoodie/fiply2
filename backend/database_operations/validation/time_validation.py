@@ -23,3 +23,8 @@ def validate_year_range(year: int, start_year: int, end_year: int) -> bool:
 def validate_year_not_before_plan_creation(year: int, plan_creation_year: int) -> bool:
     """Returns True if the given year is not before plan creation."""
     return year >= plan_creation_year
+
+# In time_validation.py
+def validate_timeline(start_year: int, retirement_year: int, end_year: int) -> None:
+    if not (start_year < retirement_year < end_year):
+        raise ValueError("Timeline must flow: start_year < retirement_year < end_year")

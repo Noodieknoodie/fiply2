@@ -5,15 +5,11 @@ from fnmatch import fnmatch
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 OUTPUT_FILE = os.path.join(PROJECT_ROOT, "docs", "FIPLI_FILE_HIERARCHY.md")
 
-
-# Exclude completely (hardcoded because these are always useless)
-EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv", ".cursor"}
+# Exclude completely (add new folders here)
+EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv", ".cursor", "CURSOR_JOURNAL", "docs", "non_code_ignore"}
 
 # Exclude specific file types
 EXCLUDE_FILES = {"*.pyc", "*.sqbpro", "generate_schema.py", "gfh.py"}
-
-# Hide contents for these folders but still show them
-HIDE_CONTENTS_FOR = {"tests"}
 
 # Include Markdown files but exclude all other dotfiles
 INCLUDE_ROOT_EXTENSIONS = {".md"}
@@ -24,10 +20,6 @@ def should_include(path, is_dir=False):
 
     # Exclude unwanted directories
     if any(part in EXCLUDE_DIRS for part in parts):
-        return False
-
-    # Hide files inside specific folders (like `tests/`)
-    if not is_dir and len(parts) > 1 and parts[-2] in HIDE_CONTENTS_FOR:
         return False
 
     # Exclude unwanted file types
@@ -54,9 +46,6 @@ def generate_hierarchy():
             # Write folder name with correct indentation
             indent = " " * (rel_root.count(os.sep) * 4)
             f.write(f"{indent}{os.path.basename(root)}/\n")
-
-            if os.path.basename(root) in HIDE_CONTENTS_FOR:
-                continue  # Skip listing files inside hidden-content folders
 
             # Write included files
             subindent = " " * ((rel_root.count(os.sep) + 1) * 4)

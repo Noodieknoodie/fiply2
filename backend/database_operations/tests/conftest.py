@@ -3,24 +3,38 @@ import pytest
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
+from contextlib import contextmanager
 
 from database_operations.models import Base, Household, Plan, BaseAssumption
-from database_operations.connection import get_session
+from database_operations.connection import get_session, _engine
 
-@pytest.fixture
-def engine():
-    """Create test database in memory."""
+# Override the global engine for tests
+@pytest.fixture(scope="session", autouse=True)
+def test_engine():
+    """Create and configure the test database engine."""
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
+    
+    # Override the global engine
+    global _engine
+    _engine = engine
+    
     return engine
 
 @pytest.fixture
-def db_session(engine):
-    """Creates a fresh test database session."""
-    with Session(engine) as session:
+def db_session(test_engine):
+    """Creates a fresh test database session with automatic rollback."""
+    connection = test_engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    
+    try:
         yield session
-        session.rollback()
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
 
 @pytest.fixture
 def base_household(db_session):
@@ -56,7 +70,6 @@ def base_plan(db_session, base_household):
     db_session.add(assumptions)
     db_session.commit()
     return plan
-
 
 @pytest.fixture
 def base_plan_with_facts(db_session, base_plan):
