@@ -2,8 +2,10 @@ import os
 from fnmatch import fnmatch
 
 # Project root is where this script is located
-PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUTPUT_FILE = os.path.join(PROJECT_ROOT, "docs", "FIPLI_FILE_HIERARCHY.md")
+
+
 
 # Exclude completely (add new folders here)
 EXCLUDE_DIRS = {".git", "__pycache__", ".pytest_cache", "venv", ".cursor", "CURSOR_JOURNAL", "docs", "non_code_ignore"}

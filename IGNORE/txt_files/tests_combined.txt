@@ -1,0 +1,1496 @@
+######## backend/database_operations/tests/conftest.py ########
+```
+# tests/conftest.py
+import pytest
+from datetime import date, datetime
+from decimal import Decimal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from contextlib import contextmanager
+from database_operations.models import Base, Household, Plan, BaseAssumption
+from database_operations.connection import get_session
+import database_operations.connection as connection  # Import the module to modify its global
+# Override the global engine for tests
+@pytest.fixture(scope="session", autouse=True)
+def test_engine():
+    """Create and configure the test database engine."""
+    # Create test engine
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    Base.metadata.create_all(engine)
+    # Override the global engine in the connection module
+    connection._engine = engine
+    yield engine
+    # Cleanup after all tests
+    engine.dispose()
+@pytest.fixture
+def db_session(test_engine):
+    """Creates a fresh test database session with automatic rollback."""
+    connection = test_engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
+@pytest.fixture
+def base_household(db_session):
+    """Creates a test household with one person."""
+    household = Household(
+        household_name="Test Household",
+        person1_first_name="John",
+        person1_last_name="Doe",
+        person1_dob=date(1970, 1, 1)
+    )
+    db_session.add(household)
+    db_session.commit()
+    return household
+@pytest.fixture
+def base_plan(db_session, base_household):
+    """Creates a test plan with basic assumptions."""
+    plan = Plan(
+        household_id=base_household.household_id,
+        plan_name="Test Plan",
+        plan_creation_year=datetime.now().year
+    )
+    db_session.add(plan)
+    db_session.flush()
+    assumptions = BaseAssumption(
+        plan_id=plan.plan_id,
+        retirement_age_1=65,
+        final_age_1=95,
+        default_growth_rate=Decimal('0.06'),
+        inflation_rate=Decimal('0.03')
+    )
+    db_session.add(assumptions)
+    db_session.commit()
+    return plan
+@pytest.fixture
+def base_plan_with_facts(db_session, base_plan):
+    """Creates a plan with sample assets, liabilities, and cash flows."""
+    from database_operations.models import (
+        AssetCategory, Asset, LiabilityCategory, Liability,
+        InflowOutflow, RetirementIncomePlan
+    )
+    # Categories
+    asset_cat = AssetCategory(
+        plan_id=base_plan.plan_id,
+        category_name="Retirement Accounts"
+    )
+    db_session.add(asset_cat)
+    liability_cat = LiabilityCategory(
+        plan_id=base_plan.plan_id,
+        category_name="Mortgages"
+    )
+    db_session.add(liability_cat)
+    db_session.flush()
+    # Typical retirement portfolio components
+    asset = Asset(
+        plan_id=base_plan.plan_id,
+        asset_category_id=asset_cat.asset_category_id,
+        asset_name="401(k)",
+        owner="person1",
+        value=500000.00,
+        include_in_nest_egg=True
+    )
+    db_session.add(asset)
+    asset2 = Asset(
+        plan_id=base_plan.plan_id,
+        asset_category_id=asset_cat.asset_category_id,
+        asset_name="House",
+        owner="joint",
+        value=400000.00,
+        include_in_nest_egg=False  # Non-retirement asset
+    )
+    db_session.add(asset2)
+    liability = Liability(
+        plan_id=base_plan.plan_id,
+        liability_category_id=liability_cat.liability_category_id,
+        liability_name="Mortgage",
+        owner="joint",
+        value=300000.00,
+        interest_rate=0.0375,
+        include_in_nest_egg=True
+    )
+    db_session.add(liability)
+    # Regular cash flows
+    salary = InflowOutflow(
+        plan_id=base_plan.plan_id,
+        type="inflow",
+        name="Salary",
+        owner="person1",
+        annual_amount=100000.00,
+        start_year=base_plan.plan_creation_year,
+        end_year=base_plan.plan_creation_year + 10,
+        apply_inflation=True
+    )
+    db_session.add(salary)
+    # Retirement income at retirement age
+    social_security = RetirementIncomePlan(
+        plan_id=base_plan.plan_id,
+        name="Social Security",
+        owner="person1",
+        annual_income=30000.00,
+        start_age=67,
+        apply_inflation=True
+    )
+    db_session.add(social_security)
+    db_session.commit()
+    return base_plan
+```
+
+######## backend/database_operations/tests/test_crud_operations.py ########
+```
+# tests/test_crud_operations.py
+import pytest
+from decimal import Decimal
+from datetime import date
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import event
+from database_operations.crud.financial.assets_crud import AssetCRUD
+from database_operations.crud.financial.liabilities_crud import LiabilityCRUD
+from database_operations.crud.financial.cash_flows_crud import CashFlowCRUD
+from database_operations.crud.plans_crud import PlanCRUD
+from database_operations.models import Asset, Liability, Plan, CashFlow
+def test_asset_crud_operations(db_session, base_plan_with_facts):
+    """Test basic CRUD operations for assets."""
+    crud = AssetCRUD(db_session)
+    # Create
+    asset = crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,  # From fixture
+        asset_name="Roth IRA",
+        value=100000.00,
+        owner="person1"
+    )
+    assert asset.asset_name == "Roth IRA"
+    # Read
+    retrieved = crud.get_asset(asset.asset_id)
+    assert retrieved is not None
+    assert retrieved.value == 100000.00
+    # Update
+    updated = crud.update_asset(
+        asset.asset_id,
+        {"value": 150000.00}
+    )
+    assert updated.value == 150000.00
+    # Delete
+    assert crud.delete_asset(asset.asset_id)
+def test_transaction_isolation(db_session, base_plan_with_facts):
+    """Test transaction isolation levels and concurrent modifications."""
+    crud = AssetCRUD(db_session)
+    # Create initial asset
+    asset = crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,
+        asset_name="Test Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    # Start a new transaction
+    with db_session.begin_nested():
+        # Modify asset within transaction
+        crud.update_asset(
+            asset.asset_id,
+            {"value": 150000.00}
+        )
+        # Verify value is updated within transaction
+        modified = crud.get_asset(asset.asset_id)
+        assert modified.value == 150000.00
+        # Rollback transaction
+        db_session.rollback()
+    # Verify original value is restored
+    original = crud.get_asset(asset.asset_id)
+    assert original.value == 100000.00
+def test_complex_transaction_rollback(db_session, base_plan_with_facts):
+    """Test rollback of complex operations involving multiple entities."""
+    asset_crud = AssetCRUD(db_session)
+    liability_crud = LiabilityCRUD(db_session)
+    try:
+        # Start transaction
+        with db_session.begin_nested():
+            # Create asset
+            asset = asset_crud.create_asset(
+                plan_id=base_plan_with_facts.plan_id,
+                asset_category_id=1,
+                asset_name="House",
+                value=500000.00,
+                owner="joint"
+            )
+            # Create related liability (mortgage)
+            liability = liability_crud.create_liability(
+                plan_id=base_plan_with_facts.plan_id,
+                liability_category_id=1,
+                liability_name="Mortgage",
+                value=400000.00,
+                owner="joint",
+                interest_rate=0.035
+            )
+            # Simulate error condition
+            raise ValueError("Simulated error")
+    except ValueError:
+        db_session.rollback()
+    # Verify nothing was committed
+    assert asset_crud.get_asset(asset.asset_id) is None
+    assert liability_crud.get_liability(liability.liability_id) is None
+def test_concurrent_modifications(db_session, base_plan_with_facts):
+    """Test handling of concurrent modifications to the same entity."""
+    crud = AssetCRUD(db_session)
+    # Create test asset
+    asset = crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,
+        asset_name="Test Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    # Simulate concurrent sessions
+    session1 = db_session
+    session2 = db_session.session_factory()
+    try:
+        # Modify in session 1
+        crud1 = AssetCRUD(session1)
+        crud1.update_asset(asset.asset_id, {"value": 150000.00})
+        # Modify in session 2
+        crud2 = AssetCRUD(session2)
+        with pytest.raises(Exception):  # Expect concurrent modification error
+            crud2.update_asset(asset.asset_id, {"value": 200000.00})
+    finally:
+        session2.close()
+def test_database_constraints(db_session, base_plan_with_facts):
+    """Test enforcement of database constraints."""
+    crud = AssetCRUD(db_session)
+    # Test foreign key constraint
+    with pytest.raises(IntegrityError):
+        crud.create_asset(
+            plan_id=999999,  # Non-existent plan
+            asset_category_id=1,
+            asset_name="Invalid Asset",
+            value=100000.00,
+            owner="person1"
+        )
+    # Test unique constraint
+    asset1 = crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,
+        asset_name="Unique Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    with pytest.raises(IntegrityError):
+        # Attempt to create asset with same name in same plan
+        crud.create_asset(
+            plan_id=base_plan_with_facts.plan_id,
+            asset_category_id=1,
+            asset_name="Unique Asset",  # Duplicate name
+            value=200000.00,
+            owner="person1"
+        )
+def test_cascade_operations(db_session, base_plan_with_facts):
+    """Test cascade behavior for related entities."""
+    plan_crud = PlanCRUD(db_session)
+    asset_crud = AssetCRUD(db_session)
+    # Create plan with assets
+    plan = plan_crud.create_plan(
+        household_id=base_plan_with_facts.household_id,
+        plan_name="Cascade Test Plan"
+    )
+    asset = asset_crud.create_asset(
+        plan_id=plan.plan_id,
+        asset_category_id=1,
+        asset_name="Test Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    # Delete plan and verify cascade
+    plan_crud.delete_plan(plan.plan_id)
+    # Verify asset was cascade deleted
+    assert asset_crud.get_asset(asset.asset_id) is None
+def test_transaction_deadlock_handling(db_session, base_plan_with_facts):
+    """Test handling of potential deadlock scenarios."""
+    asset_crud = AssetCRUD(db_session)
+    liability_crud = LiabilityCRUD(db_session)
+    # Create test entities
+    asset = asset_crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,
+        asset_name="Deadlock Test Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    liability = liability_crud.create_liability(
+        plan_id=base_plan_with_facts.plan_id,
+        liability_category_id=1,
+        liability_name="Deadlock Test Liability",
+        value=50000.00,
+        owner="person1",
+        interest_rate=0.035
+    )
+    # Simulate deadlock scenario
+    session1 = db_session
+    session2 = db_session.session_factory()
+    try:
+        with session1.begin_nested():
+            # Update asset in session 1
+            asset_crud1 = AssetCRUD(session1)
+            asset_crud1.update_asset(asset.asset_id, {"value": 150000.00})
+            with session2.begin_nested():
+                # Try to update liability in session 2
+                liability_crud2 = LiabilityCRUD(session2)
+                liability_crud2.update_liability(
+                    liability.liability_id,
+                    {"value": 60000.00}
+                )
+                # This should raise a deadlock error
+                with pytest.raises(Exception):
+                    asset_crud2 = AssetCRUD(session2)
+                    asset_crud2.update_asset(asset.asset_id, {"value": 200000.00})
+    finally:
+        session2.close()
+def test_bulk_operations(db_session, base_plan_with_facts):
+    """Test handling of bulk create/update operations."""
+    crud = AssetCRUD(db_session)
+    # Bulk create assets
+    assets_data = [
+        {
+            "plan_id": base_plan_with_facts.plan_id,
+            "asset_category_id": 1,
+            "asset_name": f"Bulk Asset {i}",
+            "value": 100000.00 * i,
+            "owner": "person1"
+        }
+        for i in range(1, 6)
+    ]
+    created_assets = crud.bulk_create_assets(assets_data)
+    assert len(created_assets) == 5
+    # Bulk update assets
+    updates = [
+        {"asset_id": asset.asset_id, "value": asset.value * 1.1}
+        for asset in created_assets
+    ]
+    updated_assets = crud.bulk_update_assets(updates)
+    assert len(updated_assets) == 5
+    assert all(
+        updated.value > original.value 
+        for updated, original in zip(updated_assets, created_assets)
+    )
+def test_audit_trail(db_session, base_plan_with_facts):
+    """Test audit trail for CRUD operations."""
+    crud = AssetCRUD(db_session)
+    # Create asset with audit
+    asset = crud.create_asset(
+        plan_id=base_plan_with_facts.plan_id,
+        asset_category_id=1,
+        asset_name="Audit Test Asset",
+        value=100000.00,
+        owner="person1"
+    )
+    assert asset.created_at is not None
+    # Update asset
+    updated = crud.update_asset(
+        asset.asset_id,
+        {"value": 150000.00}
+    )
+    assert updated.updated_at is not None
+    assert updated.updated_at > updated.created_at
+```
+
+######## backend/database_operations/tests/test_growth_calculations.py ########
+```
+# tests/test_growth_calculations.py
+from decimal import Decimal
+import pytest
+from datetime import date
+from database_operations.calculations.base_facts.growth_handler_calcs import GrowthRateHandler
+from database_operations.models import GrowthRateConfiguration
+from database_operations.utils.time_utils import get_year_for_age
+def test_default_growth_application():
+    """Test application of default growth rate."""
+    handler = GrowthRateHandler()
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2025,
+        default_rate=Decimal('0.06'),
+        growth_configs=[]  # No configurations = use default
+    )
+    assert result.final_value == Decimal('106000')
+    assert result.growth_amount == Decimal('6000')
+    assert result.rate_source == 'default'
+def test_stepwise_growth_handling():
+    """Test stepwise growth rate application."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2027,
+            growth_rate=Decimal('0.08')
+        ),
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2028,
+            end_year=2030,
+            growth_rate=Decimal('0.06')
+        )
+    ]
+    # Test first period
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2025,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.final_value == Decimal('108000')
+    assert result.rate_source == 'stepwise'
+    # Test gap year (should use default)
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2031,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'default'
+    assert result.final_value == Decimal('105000')
+def test_growth_rate_period_boundaries():
+    """Test growth rate calculations at period boundaries."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2027,
+            growth_rate=Decimal('0.08')
+        )
+    ]
+    # Test exactly at start year
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2025,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'stepwise'
+    assert result.final_value == Decimal('108000')
+    # Test exactly at end year
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2027,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'stepwise'
+    assert result.final_value == Decimal('108000')
+    # Test one year before start
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2024,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'default'
+    assert result.final_value == Decimal('105000')
+    # Test one year after end
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2028,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'default'
+    assert result.final_value == Decimal('105000')
+def test_overlapping_growth_periods():
+    """Test handling of overlapping growth period configurations."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2027,
+            growth_rate=Decimal('0.08')
+        ),
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2026,
+            end_year=2028,
+            growth_rate=Decimal('0.06')
+        )
+    ]
+    # Test in overlap period (should use first configured rate)
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2026,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'stepwise'
+    assert result.final_value == Decimal('108000')  # Uses first rate (0.08)
+def test_growth_rate_transitions():
+    """Test growth rate transitions between periods."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2026,
+            growth_rate=Decimal('0.08')
+        ),
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2028,
+            end_year=2029,
+            growth_rate=Decimal('0.06')
+        )
+    ]
+    # Test transition to default rate
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2027,  # Gap year
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'default'
+    assert result.final_value == Decimal('105000')
+    # Test transition back to stepwise
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2028,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.rate_source == 'stepwise'
+    assert result.final_value == Decimal('106000')
+def test_negative_growth_rates():
+    """Test handling of negative growth rates."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2026,
+            growth_rate=Decimal('-0.05')  # 5% decline
+        )
+    ]
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2025,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    assert result.final_value == Decimal('95000')
+    assert result.growth_amount == Decimal('-5000')
+def test_zero_value_growth():
+    """Test growth calculations with zero initial value."""
+    handler = GrowthRateHandler()
+    result = handler.apply_growth(
+        value=Decimal('0'),
+        year=2025,
+        default_rate=Decimal('0.06'),
+        growth_configs=[]
+    )
+    assert result.final_value == Decimal('0')
+    assert result.growth_amount == Decimal('0')
+def test_compound_growth_accuracy():
+    """Test accuracy of compound growth calculations over multiple periods."""
+    handler = GrowthRateHandler()
+    initial_value = Decimal('100000')
+    rate = Decimal('0.05')
+    # Calculate 5 years of compound growth
+    value = initial_value
+    for _ in range(5):
+        result = handler.apply_growth(
+            value=value,
+            year=2025,
+            default_rate=rate,
+            growth_configs=[]
+        )
+        value = result.final_value
+    # Compare with direct compound calculation: 100000 * (1.05)^5
+    expected = initial_value * (Decimal('1.05') ** Decimal('5'))
+    assert abs(value - expected) < Decimal('0.01')
+def test_mixed_growth_periods():
+    """Test realistic market cycle scenarios."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2026,
+            growth_rate=Decimal('-0.15')  # Market decline
+        ),
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2027,
+            end_year=2028,
+            growth_rate=Decimal('0.20')   # Recovery
+        )
+    ]
+    # Test full cycle impact
+    value = Decimal('100000')
+    for year in range(2025, 2029):
+        result = handler.apply_growth(
+            value=value,
+            year=year,
+            default_rate=Decimal('0.06'),
+            growth_configs=configs
+        )
+        value = result.final_value
+    # Verify recovery math is correct
+    # 100k * (1 - 0.15) * (1 - 0.15) * (1 + 0.20) * (1 + 0.20)
+    expected = Decimal('100000') * (Decimal('0.85') ** 2) * (Decimal('1.20') ** 2)
+    assert abs(value - expected) < Decimal('0.01')
+def test_growth_rate_precision():
+    """Test handling of precise decimal growth rates."""
+    handler = GrowthRateHandler()
+    configs = [
+        GrowthRateConfiguration(
+            configuration_type='STEPWISE',
+            start_year=2025,
+            end_year=2026,
+            growth_rate=Decimal('0.0567')  # Precise rate
+        )
+    ]
+    result = handler.apply_growth(
+        value=Decimal('100000'),
+        year=2025,
+        default_rate=Decimal('0.05'),
+        growth_configs=configs
+    )
+    expected = Decimal('100000') * (Decimal('1') + Decimal('0.0567'))
+    assert abs(result.final_value - expected) < Decimal('0.01')
+```
+
+######## backend/database_operations/tests/test_growth_configurations.py ########
+```
+# tests/test_growth_configurations.py
+from decimal import Decimal
+import pytest
+from database_operations.crud.financial.growth_rates_crud import GrowthRateCRUD
+from database_operations.validation.growth_validation import validate_stepwise_periods
+def test_validate_stepwise_periods():
+    """Test validation of stepwise growth period configurations."""
+    # Valid configurations
+    valid_periods = [
+        {"start_year": 2025, "end_year": 2027},
+        {"start_year": 2028, "end_year": 2030}
+    ]
+    assert validate_stepwise_periods(valid_periods, "test") is None
+    # Overlapping periods
+    invalid_periods = [
+        {"start_year": 2025, "end_year": 2028},
+        {"start_year": 2027, "end_year": 2030}
+    ]
+    with pytest.raises(ValueError, match="test contains overlapping periods"):
+        validate_stepwise_periods(invalid_periods, "test")
+def test_growth_rate_crud(db_session, base_plan_with_facts):
+    """Test CRUD operations for growth rate configurations."""
+    crud = GrowthRateCRUD(db_session)
+    # Test creating override growth rate
+    config = crud.create_growth_config(
+        configuration_type="OVERRIDE",
+        start_year=2025,
+        growth_rate=0.08,
+        asset_id=1  # From base_plan_with_facts fixture
+    )
+    assert config.growth_rate == 0.08
+    assert config.configuration_type == "OVERRIDE"
+def test_stepwise_growth_configuration(db_session, base_plan_with_facts):
+    """Test creation and validation of stepwise growth configurations."""
+    crud = GrowthRateCRUD(db_session)
+    # Create valid stepwise configuration
+    configs = crud.create_stepwise_config([
+        {
+            "start_year": 2025,
+            "end_year": 2027,
+            "growth_rate": 0.08
+        },
+        {
+            "start_year": 2028,
+            "end_year": 2030,
+            "growth_rate": 0.06
+        }
+    ], asset_id=1)
+    assert len(configs) == 2
+    assert configs[0].configuration_type == "STEPWISE"
+    assert configs[0].growth_rate == 0.08
+```
+
+######## backend/database_operations/tests/test_retirement_calculations.py ########
+```
+# tests/test_retirement_calculations.py
+from decimal import Decimal
+from datetime import date
+import pytest
+from database_operations.calculations.base_facts.retirement_income_calcs import RetirementIncomeCalculator
+from database_operations.models import RetirementIncomePlan, RetirementIncomeType
+from database_operations.utils.time_utils import get_age_in_year, get_year_for_age
+def test_retirement_income_activation():
+    """Test retirement income activation based on age."""
+    calc = RetirementIncomeCalculator()
+    income = RetirementIncomePlan(
+        name="Social Security",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=67,
+        dob=date(1970, 1, 1)
+    )
+    # Before retirement age
+    result = calc.calculate_income_amount(
+        income=income,
+        year=2025,  # Age 55
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert not result.is_active
+    assert result.adjusted_amount == Decimal('0')
+    # At retirement age
+    result = calc.calculate_income_amount(
+        income=income,
+        year=2037,  # Age 67
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert result.is_active
+    assert result.adjusted_amount > Decimal('30000')  # Inflation adjusted
+def test_multiple_income_stream_interactions():
+    """Test interactions between multiple retirement income streams."""
+    calc = RetirementIncomeCalculator()
+    # Create multiple income streams with different characteristics
+    incomes = [
+        RetirementIncomePlan(
+            name="Social Security",
+            owner="person1",
+            annual_income=Decimal('30000'),
+            start_age=67,
+            income_type=RetirementIncomeType.SOCIAL_SECURITY,
+            dob=date(1970, 1, 1),
+            apply_inflation=True
+        ),
+        RetirementIncomePlan(
+            name="Pension",
+            owner="person1",
+            annual_income=Decimal('40000'),
+            start_age=65,
+            income_type=RetirementIncomeType.PENSION,
+            dob=date(1970, 1, 1),
+            apply_inflation=False
+        ),
+        RetirementIncomePlan(
+            name="Part-time Work",
+            owner="person1",
+            annual_income=Decimal('20000'),
+            start_age=65,
+            end_age=70,
+            income_type=RetirementIncomeType.OTHER,
+            dob=date(1970, 1, 1),
+            apply_inflation=True
+        )
+    ]
+    # Test before any income starts (age 60)
+    results = calc.calculate_multiple_income_streams(
+        income_streams=incomes,
+        year=2030,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert sum(r.adjusted_amount for r in results) == Decimal('0')
+    # Test when pension and part-time work active (age 65)
+    results = calc.calculate_multiple_income_streams(
+        income_streams=incomes,
+        year=2035,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    active_results = [r for r in results if r.is_active]
+    assert len(active_results) == 2
+    # Test when all income streams active (age 67)
+    results = calc.calculate_multiple_income_streams(
+        income_streams=incomes,
+        year=2037,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    active_results = [r for r in results if r.is_active]
+    assert len(active_results) == 3
+    # Test after part-time work ends (age 71)
+    results = calc.calculate_multiple_income_streams(
+        income_streams=incomes,
+        year=2041,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    active_results = [r for r in results if r.is_active]
+    assert len(active_results) == 2
+def test_long_term_inflation_impact():
+    """Test long-term inflation effects on retirement income."""
+    calc = RetirementIncomeCalculator()
+    # Test income with inflation adjustment
+    income_with_inflation = RetirementIncomePlan(
+        name="Social Security",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=67,
+        dob=date(1970, 1, 1),
+        apply_inflation=True
+    )
+    # Test income without inflation adjustment
+    income_without_inflation = RetirementIncomePlan(
+        name="Fixed Pension",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=67,
+        dob=date(1970, 1, 1),
+        apply_inflation=False
+    )
+    # Calculate values after 30 years of inflation
+    start_year = 2037  # Retirement year
+    end_year = 2067    # 30 years later
+    inflation_rate = Decimal('0.03')
+    # With inflation
+    result_with_inflation = calc.calculate_income_amount(
+        income=income_with_inflation,
+        year=end_year,
+        inflation_rate=inflation_rate,
+        plan_start_year=start_year
+    )
+    # Without inflation
+    result_without_inflation = calc.calculate_income_amount(
+        income=income_without_inflation,
+        year=end_year,
+        inflation_rate=inflation_rate,
+        plan_start_year=start_year
+    )
+    # Verify inflation impact
+    assert result_with_inflation.adjusted_amount > result_without_inflation.adjusted_amount
+    expected_with_inflation = Decimal('30000') * (1 + inflation_rate) ** 30
+    assert abs(result_with_inflation.adjusted_amount - expected_with_inflation) < Decimal('0.01')
+def test_retirement_income_edge_cases():
+    """Test edge cases in retirement income calculations."""
+    calc = RetirementIncomeCalculator()
+    # Test income starting exactly at plan start
+    immediate_income = RetirementIncomePlan(
+        name="Immediate Income",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=55,  # Current age
+        dob=date(1970, 1, 1),
+        apply_inflation=True
+    )
+    result = calc.calculate_income_amount(
+        income=immediate_income,
+        year=2025,  # Plan start year
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert result.is_active
+    assert result.adjusted_amount == Decimal('30000')
+    # Test income with maximum age
+    max_age_income = RetirementIncomePlan(
+        name="Max Age Test",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=65,
+        end_age=120,  # Maximum age
+        dob=date(1970, 1, 1),
+        apply_inflation=True
+    )
+    # Test at age 119
+    result = calc.calculate_income_amount(
+        income=max_age_income,
+        year=2089,  # Age 119
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert result.is_active
+    # Test at age 121
+    result = calc.calculate_income_amount(
+        income=max_age_income,
+        year=2091,  # Age 121
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert not result.is_active
+def test_income_type_specific_calculations():
+    """Test calculations specific to different income types."""
+    calc = RetirementIncomeCalculator()
+    # Test Social Security with special inflation rules
+    social_security = RetirementIncomePlan(
+        name="Social Security",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=67,
+        income_type=RetirementIncomeType.SOCIAL_SECURITY,
+        dob=date(1970, 1, 1),
+        apply_inflation=True
+    )
+    # Test pension with no inflation
+    pension = RetirementIncomePlan(
+        name="Pension",
+        owner="person1",
+        annual_income=Decimal('40000'),
+        start_age=65,
+        income_type=RetirementIncomeType.PENSION,
+        dob=date(1970, 1, 1),
+        apply_inflation=False
+    )
+    # Calculate and compare different income types
+    year = 2037  # When both are active
+    ss_result = calc.calculate_income_amount(
+        income=social_security,
+        year=year,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    pension_result = calc.calculate_income_amount(
+        income=pension,
+        year=year,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert ss_result.is_active
+    assert pension_result.is_active
+    assert ss_result.income_type == RetirementIncomeType.SOCIAL_SECURITY
+    assert pension_result.income_type == RetirementIncomeType.PENSION
+def test_partial_year_activation():
+    """Test retirement income activation for partial years."""
+    calc = RetirementIncomeCalculator()
+    # Test mid-year birthday activation
+    mid_year_income = RetirementIncomePlan(
+        name="Mid-Year Test",
+        owner="person1",
+        annual_income=Decimal('30000'),
+        start_age=65,
+        dob=date(1970, 6, 15),  # Mid-year birthday
+        apply_inflation=True
+    )
+    # Test exact activation year
+    activation_year = get_year_for_age(mid_year_income.dob, mid_year_income.start_age)
+    result = calc.calculate_income_amount(
+        income=mid_year_income,
+        year=activation_year,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    assert result.is_active
+    assert result.partial_year_factor == Decimal('0.5')  # Half year
+    assert result.adjusted_amount == Decimal('15000')  # Half of annual amount
+def test_income_calculation_precision():
+    """Test precision handling in income calculations."""
+    calc = RetirementIncomeCalculator()
+    # Test precise income amounts
+    precise_income = RetirementIncomePlan(
+        name="Precise Test",
+        owner="person1",
+        annual_income=Decimal('30123.45'),
+        start_age=65,
+        dob=date(1970, 1, 1),
+        apply_inflation=True
+    )
+    result = calc.calculate_income_amount(
+        income=precise_income,
+        year=2035,
+        inflation_rate=Decimal('0.03'),
+        plan_start_year=2025
+    )
+    # Verify precision maintained
+    assert isinstance(result.adjusted_amount, Decimal)
+    assert result.adjusted_amount.as_tuple().exponent <= -2  # At least 2 decimal places
+```
+
+######## backend/database_operations/tests/test_scenario_calculations.py ########
+```
+# tests/test_scenario_calculations.py
+from decimal import Decimal
+from database_operations.calculations.scenario_calcs import ScenarioCalculator
+from database_operations.models import Scenario, ScenarioAssumption
+def test_basic_scenario_calculation(db_session, base_plan_with_facts):
+    """Test basic scenario calculation with retirement spending."""
+    calc = ScenarioCalculator()
+    # Create scenario with retirement spending
+    scenario = Scenario(
+        plan_id=base_plan_with_facts.plan_id,
+        scenario_name="Test Scenario"
+    )
+    db_session.add(scenario)
+    db_session.flush()
+    # Add scenario assumptions
+    assumptions = ScenarioAssumption(
+        scenario_id=scenario.scenario_id,
+        retirement_age_1=65,
+        default_growth_rate=Decimal('0.06'),
+        inflation_rate=Decimal('0.03'),
+        annual_retirement_spending=Decimal('50000')
+    )
+    db_session.add(assumptions)
+    db_session.commit()
+    # Calculate one year
+    year = base_plan_with_facts.plan_creation_year
+    result = calc.calculate_scenario_year(
+        scenario_id=scenario.scenario_id,
+        year=year,
+        prior_result=None
+    )
+    assert result is not None
+    # No retirement spending yet (before retirement)
+    assert result.retirement_spending == Decimal('0')
+    # Verify portfolio values are calculated
+    assert result.scenario_portfolio.asset_values is not None
+    assert result.scenario_portfolio.liability_values is not None
+```
+
+######## backend/database_operations/tests/test_scenario_creation.py ########
+```
+# tests/test_scenario_creation.py
+import pytest
+from decimal import Decimal
+from datetime import date
+from database_operations.crud.scenarios_crud import ScenarioCRUD
+from database_operations.models import (
+    Asset, Liability, InflowOutflow, RetirementIncomePlan,
+    GrowthRateConfiguration, ScenarioOverride
+)
+@pytest.fixture
+def complex_base_plan(db_session, base_plan_with_facts):
+    """Creates a plan with multiple assets, liabilities, and configurations."""
+    # Add additional growth rate configurations
+    growth_config = GrowthRateConfiguration(
+        asset_id=1,  # From base_plan_with_facts
+        configuration_type='STEPWISE',
+        start_year=2025,
+        end_year=2027,
+        growth_rate=Decimal('0.08')
+    )
+    db_session.add(growth_config)
+    # Add additional retirement income
+    pension = RetirementIncomePlan(
+        plan_id=base_plan_with_facts.plan_id,
+        name="Private Pension",
+        owner="person1",
+        annual_income=Decimal('25000'),
+        start_age=65,
+        apply_inflation=True
+    )
+    db_session.add(pension)
+    # Add more complex cash flows
+    bonus = InflowOutflow(
+        plan_id=base_plan_with_facts.plan_id,
+        type="inflow",
+        name="Annual Bonus",
+        owner="person1",
+        annual_amount=Decimal('10000'),
+        start_year=2025,
+        end_year=2035,
+        apply_inflation=True
+    )
+    db_session.add(bonus)
+    db_session.commit()
+    return base_plan_with_facts
+def test_create_basic_scenario(db_session, base_plan):
+    """Test basic scenario creation with assumption inheritance."""
+    crud = ScenarioCRUD(db_session)
+    scenario = crud.create_scenario(
+        plan_id=base_plan.plan_id,
+        scenario_name="Test Scenario"
+    )
+    # Verify scenario creation
+    assert scenario is not None
+    assert scenario.plan_id == base_plan.plan_id
+    # Verify assumption inheritance
+    scenario_with_assumptions = crud.get_scenario(
+        scenario.scenario_id,
+        include_assumptions=True
+    )
+    assert scenario_with_assumptions.assumptions is not None
+    assert scenario_with_assumptions.assumptions.retirement_age_1 == base_plan.base_assumptions.retirement_age_1
+    assert scenario_with_assumptions.assumptions.default_growth_rate == base_plan.base_assumptions.default_growth_rate
+def test_create_scenario_with_retirement_spending(db_session, base_plan):
+    """Test scenario creation with retirement spending."""
+    crud = ScenarioCRUD(db_session)
+    scenario = crud.create_scenario(
+        plan_id=base_plan.plan_id,
+        scenario_name="Retirement Test",
+        assumptions={
+            'annual_retirement_spending': Decimal('50000')
+        }
+    )
+    scenario_assumptions = crud.get_scenario(
+        scenario.scenario_id,
+        include_assumptions=True
+    ).assumptions
+    assert scenario_assumptions.annual_retirement_spending == Decimal('50000')
+def test_complete_scenario_inheritance(db_session, complex_base_plan):
+    """Test comprehensive inheritance of all plan components."""
+    crud = ScenarioCRUD(db_session)
+    # Create scenario with single asset override
+    scenario = crud.create_scenario(
+        plan_id=complex_base_plan.plan_id,
+        scenario_name="Inheritance Test"
+    )
+    # Override single asset value
+    asset_override = ScenarioOverride(
+        scenario_id=scenario.scenario_id,
+        target_type="asset",
+        target_id=1,
+        field="value",
+        value=Decimal('600000')
+    )
+    db_session.add(asset_override)
+    db_session.commit()
+    # Verify all components
+    scenario_details = crud.get_scenario_details(scenario.scenario_id)
+    # Check assets inheritance
+    assert len(scenario_details.assets) == len(complex_base_plan.assets)
+    modified_asset = next(a for a in scenario_details.assets if a.asset_id == 1)
+    assert modified_asset.value == Decimal('600000')
+    # Check unmodified assets maintain original values
+    unmodified_assets = [a for a in scenario_details.assets if a.asset_id != 1]
+    for asset in unmodified_assets:
+        base_asset = next(a for a in complex_base_plan.assets if a.asset_id == asset.asset_id)
+        assert asset.value == base_asset.value
+    # Verify growth rate configurations inheritance
+    assert len(scenario_details.growth_configurations) == len(complex_base_plan.growth_configurations)
+    # Check liabilities inheritance
+    assert len(scenario_details.liabilities) == len(complex_base_plan.liabilities)
+    # Check cash flows inheritance
+    assert len(scenario_details.cash_flows) == len(complex_base_plan.cash_flows)
+    # Check retirement income inheritance
+    assert len(scenario_details.retirement_income_plans) == len(complex_base_plan.retirement_income_plans)
+def test_scenario_asset_inheritance(db_session, complex_base_plan):
+    """Test detailed asset inheritance with growth configurations."""
+    crud = ScenarioCRUD(db_session)
+    # Create scenario with growth rate override
+    scenario = crud.create_scenario(
+        plan_id=complex_base_plan.plan_id,
+        scenario_name="Asset Growth Test"
+    )
+    # Override growth rate configuration
+    growth_override = ScenarioOverride(
+        scenario_id=scenario.scenario_id,
+        target_type="growth_rate",
+        target_id=1,
+        field="growth_rate",
+        value=Decimal('0.09')
+    )
+    db_session.add(growth_override)
+    db_session.commit()
+    # Verify growth rate inheritance and override
+    scenario_details = crud.get_scenario_details(scenario.scenario_id)
+    modified_growth = next(
+        g for g in scenario_details.growth_configurations 
+        if g.asset_id == 1 and g.configuration_type == 'STEPWISE'
+    )
+    assert modified_growth.growth_rate == Decimal('0.09')
+    # Verify other growth configurations remain unchanged
+    unmodified_growth = [
+        g for g in scenario_details.growth_configurations 
+        if g.asset_id != 1 or g.configuration_type != 'STEPWISE'
+    ]
+    for growth in unmodified_growth:
+        base_growth = next(
+            g for g in complex_base_plan.growth_configurations 
+            if g.asset_id == growth.asset_id
+        )
+        assert growth.growth_rate == base_growth.growth_rate
+def test_scenario_override_validation(db_session, base_plan):
+    """Test that scenario overrides are properly validated."""
+    crud = ScenarioCRUD(db_session)
+    scenario = crud.create_scenario(
+        plan_id=base_plan.plan_id,
+        scenario_name="Override Test"
+    )
+    # Should raise error when no target specified
+    with pytest.raises(ValueError, match="Override must have a valid target"):
+        crud.add_override(
+            scenario_id=scenario.scenario_id,
+            override_field="value",
+            override_value="100000"
+        )
+    # Should raise error for invalid target type
+    with pytest.raises(ValueError, match="Invalid target type"):
+        crud.add_override(
+            scenario_id=scenario.scenario_id,
+            target_type="invalid_type",
+            target_id=1,
+            override_field="value",
+            override_value="100000"
+        )
+    # Should raise error for non-existent target
+    with pytest.raises(ValueError, match="Target not found"):
+        crud.add_override(
+            scenario_id=scenario.scenario_id,
+            target_type="asset",
+            target_id=999,
+            override_field="value",
+            override_value="100000"
+        )
+def test_scenario_assumption_inheritance(db_session, complex_base_plan):
+    """Test inheritance and override of scenario assumptions."""
+    crud = ScenarioCRUD(db_session)
+    # Create scenario with modified assumptions
+    scenario = crud.create_scenario(
+        plan_id=complex_base_plan.plan_id,
+        scenario_name="Assumption Test",
+        assumptions={
+            'retirement_age_1': 67,
+            'default_growth_rate': Decimal('0.07')
+        }
+    )
+    # Verify modified assumptions
+    scenario_assumptions = crud.get_scenario(
+        scenario.scenario_id,
+        include_assumptions=True
+    ).assumptions
+    assert scenario_assumptions.retirement_age_1 == 67
+    assert scenario_assumptions.default_growth_rate == Decimal('0.07')
+    # Verify unmodified assumptions match base plan
+    assert scenario_assumptions.inflation_rate == complex_base_plan.base_assumptions.inflation_rate
+    assert scenario_assumptions.final_age_1 == complex_base_plan.base_assumptions.final_age_1
+```
+
+######## backend/database_operations/tests/test_timeline_validations.py ########
+```
+# tests/test_timeline_validations.py
+from datetime import date, timedelta
+import pytest
+from database_operations.validation.scenario_timeline_validation import validate_projection_timeline
+from database_operations.utils.time_utils import (
+    get_age_in_year, 
+    get_year_for_age,
+    validate_year_not_before_plan_creation,
+    map_age_to_years
+)
+def test_projection_timeline_validation():
+    """Test validation of basic timeline constraints."""
+    start_year = 2025
+    # Valid timeline
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=2035,
+        end_year=2045
+    )
+    # Invalid: retirement before start
+    assert not validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=2024,
+        end_year=2045
+    )
+    # Invalid: end before retirement
+    assert not validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=2035,
+        end_year=2034
+    )
+def test_partial_year_transitions():
+    """Test timeline validation with partial year transitions."""
+    # Test mid-year retirement transitions
+    dob = date(1970, 6, 15)  # Mid-year birthday
+    start_year = 2025
+    retirement_age = 65
+    # Calculate exact retirement date
+    retirement_year = get_year_for_age(dob, retirement_age)
+    # Verify retirement year calculation accounts for mid-year birthday
+    assert get_age_in_year(dob, retirement_year) == retirement_age
+    # Test retirement year validation
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=retirement_year,
+        end_year=retirement_year + 10
+    )
+    # Test with different birth months
+    early_year_dob = date(1970, 1, 1)
+    late_year_dob = date(1970, 12, 31)
+    early_retirement_year = get_year_for_age(early_year_dob, retirement_age)
+    late_retirement_year = get_year_for_age(late_year_dob, retirement_age)
+    # Verify age calculations for different birth months
+    assert get_age_in_year(early_year_dob, early_retirement_year) == retirement_age
+    assert get_age_in_year(late_year_dob, late_retirement_year) == retirement_age
+def test_age_based_timeline_edge_cases():
+    """Test timeline validation for age-based edge cases."""
+    dob = date(1970, 1, 1)
+    start_year = 2025
+    # Test retirement at exact year boundary
+    retirement_age = 65
+    retirement_year = get_year_for_age(dob, retirement_age)
+    # Verify timeline with exact boundary retirement
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=retirement_year,
+        end_year=retirement_year + 30
+    )
+    # Test maximum age scenarios
+    max_age = 120
+    end_year = get_year_for_age(dob, max_age)
+    # Verify timeline with maximum age
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=retirement_year,
+        end_year=end_year
+    )
+    # Test century boundary transition
+    century_boundary_dob = date(1999, 12, 31)
+    century_retirement_age = 65
+    century_retirement_year = get_year_for_age(century_boundary_dob, century_retirement_age)
+    assert validate_projection_timeline(
+        start_year=2025,
+        retirement_year=century_retirement_year,
+        end_year=century_retirement_year + 30
+    )
+def test_timeline_modification_validation():
+    """Test validation of timeline modifications."""
+    dob = date(1970, 1, 1)
+    start_year = 2025
+    original_retirement_age = 65
+    original_retirement_year = get_year_for_age(dob, original_retirement_age)
+    # Test moving retirement earlier
+    early_retirement_age = 62
+    early_retirement_year = get_year_for_age(dob, early_retirement_age)
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=early_retirement_year,
+        end_year=original_retirement_year + 30
+    )
+    # Test moving retirement later
+    late_retirement_age = 70
+    late_retirement_year = get_year_for_age(dob, late_retirement_age)
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=late_retirement_year,
+        end_year=late_retirement_year + 25
+    )
+    # Test extending end date
+    extended_end_year = late_retirement_year + 35
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=late_retirement_year,
+        end_year=extended_end_year
+    )
+def test_age_year_mapping_validation():
+    """Test validation of age-to-year mapping scenarios."""
+    dob = date(1970, 1, 1)
+    start_year = 2025
+    end_year = 2055
+    # Generate complete age-to-year mapping
+    age_year_map = map_age_to_years(dob, start_year, end_year)
+    # Verify all ages are present
+    start_age = get_age_in_year(dob, start_year)
+    end_age = get_age_in_year(dob, end_year)
+    assert len(age_year_map) == (end_age - start_age + 1)
+    assert all(age in age_year_map for age in range(start_age, end_age + 1))
+    # Verify correct year mapping
+    for age, year in age_year_map.items():
+        assert get_age_in_year(dob, year) == age
+def test_invalid_timeline_scenarios():
+    """Test various invalid timeline scenarios."""
+    start_year = 2025
+    # Test invalid year order
+    with pytest.raises(ValueError):
+        validate_projection_timeline(
+            start_year=2030,  # Start after retirement
+            retirement_year=2025,
+            end_year=2045
+        )
+    # Test same year retirement
+    with pytest.raises(ValueError):
+        validate_projection_timeline(
+            start_year=2025,
+            retirement_year=2025,  # Same as start
+            end_year=2045
+        )
+    # Test same year end
+    with pytest.raises(ValueError):
+        validate_projection_timeline(
+            start_year=2025,
+            retirement_year=2035,
+            end_year=2035  # Same as retirement
+        )
+def test_timeline_consistency_across_scenarios():
+    """Test timeline consistency when used across multiple scenarios."""
+    dob = date(1970, 1, 1)
+    start_year = 2025
+    retirement_age = 65
+    retirement_year = get_year_for_age(dob, retirement_age)
+    end_year = retirement_year + 30
+    # Base timeline
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=retirement_year,
+        end_year=end_year
+    )
+    # Scenario variations
+    variations = [
+        (retirement_age - 3, 30),  # Early retirement
+        (retirement_age + 3, 27),  # Late retirement
+        (retirement_age, 35),      # Extended end date
+        (retirement_age, 25)       # Shorter end date
+    ]
+    for var_retirement_age, years_after_retirement in variations:
+        var_retirement_year = get_year_for_age(dob, var_retirement_age)
+        var_end_year = var_retirement_year + years_after_retirement
+        assert validate_projection_timeline(
+            start_year=start_year,
+            retirement_year=var_retirement_year,
+            end_year=var_end_year
+        )
+def test_leap_year_handling():
+    """Test timeline validation with leap year considerations."""
+    # Test DOB on Feb 29
+    leap_year_dob = date(1972, 2, 29)  # Leap year
+    start_year = 2025
+    retirement_age = 65
+    retirement_year = get_year_for_age(leap_year_dob, retirement_age)
+    # Verify correct age calculation for leap year birth date
+    assert get_age_in_year(leap_year_dob, retirement_year) == retirement_age
+    # Verify timeline validation works correctly with leap year DOB
+    assert validate_projection_timeline(
+        start_year=start_year,
+        retirement_year=retirement_year,
+        end_year=retirement_year + 30
+    )
+```
+
+######## backend/database_operations/tests/test_time_handeling.py ########
+```
+# tests/test_time_handling.py
+from datetime import date
+import pytest
+from database_operations.utils.time_utils import (
+    get_age_in_year,
+    get_year_for_age,
+    validate_year_not_before_plan_creation
+)
+def test_age_year_conversion():
+    """Test conversion between ages and years."""
+    dob = date(1970, 1, 1)
+    # Basic age calculation
+    assert get_age_in_year(dob, 2025) == 55
+    # Year for age calculation
+    assert get_year_for_age(dob, 65) == 2035
+    # Verify consistency
+    retirement_age = 65
+    retirement_year = get_year_for_age(dob, retirement_age)
+    assert get_age_in_year(dob, retirement_year) == retirement_age
+def test_plan_creation_year_validation():
+    """Test validation of years against plan creation."""
+    plan_creation_year = 2025
+    # Valid years
+    assert validate_year_not_before_plan_creation(2025, plan_creation_year)
+    assert validate_year_not_before_plan_creation(2026, plan_creation_year)
+    # Invalid years
+    assert not validate_year_not_before_plan_creation(2024, plan_creation_year)
+def test_age_calculations_with_partial_years():
+    """Test age calculations considering month/day."""
+    dob = date(1970, 6, 15)
+    # Should be 54 at start of 2025
+    assert get_age_in_year(dob, 2025) == 54
+    # Different DOB timing
+    early_dob = date(1970, 1, 1)
+    late_dob = date(1970, 12, 31)
+    assert get_age_in_year(early_dob, 2025) == 55
+    assert get_age_in_year(late_dob, 2025) == 54
+```
+
+######## backend/database_operations/tests/__init__.py ########
+```
+"""Test package for database operations.""" 
+```
+

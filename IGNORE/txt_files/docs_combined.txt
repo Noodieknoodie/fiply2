@@ -1,0 +1,520 @@
+######## docs/FIPLI_CORE_LOGIC.md ########
+```
+# FIPLI_CORE_LOGIC.md
+# This document contains specific details about the core data model and calculation logic of the FIPLI project.
+################ FIPLI: Core Data Model & Calculation Logic ################
+## Household
+- Person 1: First/Last Name, DOB (required)
+- Person 2: First/Last Name, DOB (optional)
+- Ability to select which person's DOB is used to determine the projection start year  
+- Used for all year-based calculations  
+- Manages multiple plans  
+## Time Handling Principles
+- DOB is the only true date input  
+- All calculations reference absolute years internally  
+- Conversion rules:  
+  - DOB → Plan Creation Year: Determines the start year. Projections always begin in the year the plan was created, ensuring consistency across different plans and preventing shifting start points based on user age at different access times.
+  - Years ↔ Age: Derived dynamically from DOB when needed  
+  - Store values as entered by the user and convert as needed. aka "store what you know, convert in the backend"  
+## Plans
+- Each household → multiple plans  
+- Each plan consists of:  
+  1. Base Facts Aggregation  
+  2. Scenarios  
+  3. Projection  
+**Base Facts Aggregation**  
+## Asset Categories
+- Customizable names (e.g., Qualified, Non-Qualified)  
+- Assets can be assigned to categories  
+- Categories for grouping/reporting only  
+## Assets
+- Value  
+- Optional category assignment  
+- Growth handling:  
+  1. Default: Uses base assumption growth rate  
+  2. Override: Asset-specific fixed rate  
+  3. Stepwise: Multiple rates over time periods (start year / end year)  
+  4. Gaps in stepwise fall to default  
+- Optional inflation toggle  
+## Liability Categories
+- Customizable names (e.g., Personal, Business)  
+- Liabilities can be assigned to categories  
+- Categories for grouping/reporting only  
+## Liabilities
+- Value  
+- Optional category assignment  
+- Optional interest rate  
+- Fixed value if no rate specified  
+- No default growth rate usage, not affected by it  
+## Scheduled Inflows/Outflows
+- Start year, end year (stored as entered but converted as needed)  
+- Amount  
+- Optional inflation toggle  
+- For discrete events only  
+- Input in years  
+- Examples: College (start year, end year different), inheritance (start year, end year the same)  
+## Retirement Income
+- Start year, end year  
+- Amount  
+- Optional inflation toggle  
+- Input in absolute years (derived dynamically from selected person's retirement age)  
+- For SS/Pension/Deferred Comp, etc.  
+- Separate from scheduled inflows  
+## Base Assumptions
+- Default growth rate  
+- Inflation rate  
+- Retirement year (derived from selected retirement age)  
+- End year (life expectancy year)
+## Base Facts vs Scenarios
+Base facts represent known financial components:
+- Assets and their growth
+- Liabilities and interest
+- Scheduled cash flows (both inflows and outflows)
+- Retirement income streams (Social Security, pensions)
+Scenarios add withdrawal modeling:
+- Annual retirement spending (how much can be safely withdrawn)
+(Retirement Spending is a blanket withdrawal rate that begins at retirement and applies to the aggregated retirement nest egg portfolio, drawing from the combined pool of retirement-eligible assets and income streams rather than any specific account. This is only in Scenarios.)
+- Always inflation-adjusted
+- Starts at retirement year
+- Common use: Finding maximum sustainable withdrawal rate
+## Scenario System - Detailed Behavior
+Scenarios provide a sandbox for "what-if" analysis. Each scenario:
+1. Timeline Fundamentals
+- Uses same projection timeline as the base plan (start/end years)
+- This ensures all scenarios can be compared on the same charts
+2. Inherits (with override capability):
+- All assets with their values and growth configurations 
+- All liabilities with their values and interest rates
+- All scheduled cash flows with their amounts and timing
+- All retirement income streams with their amounts and timing
+- All base assumptions (growth rates, inflation)
+3. Override Flexibility Examples:
+- Asset/liability values
+- Individual growth rate configurations (changing rate, start year, end year of stepwise periods)
+- Cash flow amounts and timing
+- Retirement income amounts and timing
+- Default growth rate
+- Inflation rate
+- Retirement ages
+4. Unique to Scenarios:
+- Retirement spending amount (the aggregated portfolio withdrawal)
+Important: Scenarios maintain maximum override flexibility while preserving the base plan's fundamental timeline. This allows for detailed "what-if" modeling while ensuring all scenarios can be meaningfully compared.
+## Chart Projection
+- Annual periods only  
+- X-axis: Year-based (absolute years)  
+- Y-axis: Portfolio value  
+- Shows retirement nest egg  
+- Not total net worth  
+- Linear calculations only  
+- No intra-year display  
+- Dynamic updates on changes  
+## Validation Philosophy
+The system prevents impossible states (like overlapping periods) while allowing maximum flexibility for reasonable values. Timeline consistency is enforced architecturally rather than through validation.
+## Core Validations
+(This app is designed for maximum flexibility. Validations ensure logical consistency without unnecessary restrictions, allowing accurate and user-driven projections.)  
+1. Date of birth must be a valid past date  
+2. Retirement year must be after the start year  
+3. End year must be after retirement year  
+4. Start year must be before end year for inflows/outflows  
+5. Stepwise growth periods must be in chronological order and not overlap  
+6. Growth rate, inflation rate, and interest rate must be numeric and can be negative  
+7. Assets, liabilities, scheduled inflows, scheduled outflows, retirement income, and retirement spending must be positive values  
+8. Retirement spending cannot be negative  
+## Annual Calculation Order
+1. Start with prior year-end values  
+2. Apply scheduled inflows (inflation-adjusted if enabled)  
+3. Apply scheduled outflows (inflation-adjusted if enabled)  
+4. Apply retirement income  
+5. Apply retirement spending  
+6. Apply growth rates to remaining balance:  
+   - Asset-specific rates first  
+   - Default rates to remaining  
+7. Apply liability interest  
+8. Calculate year-end total  
+## Value Display Principles
+- All values shown in current dollars  
+- Inflation adjustments compound annually  
+- Growth compounds annually  
+- No partial year or day counting  
+- No cash flow timing within year  
+- All events assumed to occur at year boundaries  
+- Portfolio values represent year-end totals  
+These rules deliberately simplified for:  
+- Clear user understanding  
+- Consistent calculations  
+- Predictable results  
+- Easy scenario comparison  
+- Linear projection model integrity  
+# KEY TAKEAWAYS  
+- **Core modeling choice:** No intra-year calculations, strictly linear projections. Ensures predictability and transparency.  
+- **Scenario overrides:** Each scenario is a sandbox that inherits base facts but can override parameters, allowing flexible "what-if" planning, including max sustainable spend calculations.  
+- **Growth rate system:** Assets can have default, fixed, or stepwise growth rates, while liabilities use an optional interest rate instead of growth rates.  
+- **Time handling:** The system uses absolute years as the primary reference for calculations, while the database stores the user's original input and converts between formats as needed.  
+- **Calculation flow:** A structured order ensures logical consistency, applying inflows, outflows, income, spending, growth, and liabilities sequentially.  
+- **Validation rules:** Designed for flexibility while preventing illogical inputs, such as non-chronological stepwise growth periods or negative retirement spending.
+```
+
+######## docs/FIPLI_DB_SCHEMA.md ########
+```
+# FIPLI_DB_SCHEMA.md
+# This document contains the schema preview for the FIPLI database.
+################ FIPLI: DB Schema #################
+DB File Path: backend\database_operations\database\fiply2_database.db
+BEGIN TRANSACTION;
+CREATE TABLE asset_categories (
+    asset_category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    category_name TEXT NOT NULL,
+    category_order INTEGER DEFAULT 0,               -- For UI ordering
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "asset_categories" VALUES(1,1,'Real Estate',1);
+INSERT INTO "asset_categories" VALUES(2,1,'Retirement Accounts',2);
+INSERT INTO "asset_categories" VALUES(3,1,'Investments',3);
+INSERT INTO "asset_categories" VALUES(4,2,'Tech Stocks',1);
+INSERT INTO "asset_categories" VALUES(5,2,'Crypto',2);
+INSERT INTO "asset_categories" VALUES(6,2,'Index Funds',3);
+INSERT INTO "asset_categories" VALUES(7,2,'Real Estate',4);
+INSERT INTO "asset_categories" VALUES(8,6,'International Real Estate',1);
+INSERT INTO "asset_categories" VALUES(9,6,'Global Equities',2);
+INSERT INTO "asset_categories" VALUES(10,6,'Cryptocurrency',3);
+CREATE TABLE assets (
+    asset_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    asset_category_id INTEGER NOT NULL,
+    asset_name TEXT NOT NULL,
+    owner TEXT NOT NULL,                           -- 'person1', 'person2', or 'joint'
+    value REAL NOT NULL,                          -- Current value
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (asset_category_id) REFERENCES asset_categories (asset_category_id) ON DELETE CASCADE
+);
+INSERT INTO "assets" VALUES(1,1,1,'Primary Residence','joint',750000.0,0);
+INSERT INTO "assets" VALUES(2,1,2,'401(k)','person1',500000.0,1);
+INSERT INTO "assets" VALUES(3,1,2,'IRA','person2',350000.0,1);
+INSERT INTO "assets" VALUES(4,1,3,'Stock Portfolio','joint',250000.0,1);
+INSERT INTO "assets" VALUES(5,2,4,'Tech Portfolio','person1',300000.0,1);
+INSERT INTO "assets" VALUES(6,2,5,'Bitcoin Holdings','person1',150000.0,1);
+INSERT INTO "assets" VALUES(7,2,6,'Total Market ETF','person1',500000.0,1);
+CREATE TABLE base_assumptions (
+    plan_id INTEGER PRIMARY KEY,
+    retirement_age_1 INTEGER,                       -- Age-based: "Retire at 65"
+    retirement_age_2 INTEGER,                       -- Age-based: "Retire at 65"
+    final_age_1 INTEGER,                           -- Age-based: "Plan until 95"
+    final_age_2 INTEGER,                           -- Age-based: "Plan until 95"
+    final_age_selector INTEGER,                     -- Which person's final age to use (1 or 2)
+    default_growth_rate REAL,                      -- Annual growth rate (e.g., 0.05 for 5%)
+    inflation_rate REAL,                           -- Annual inflation rate (e.g., 0.03 for 3%)
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "base_assumptions" VALUES(1,65,67,95,95,1,0.06,0.028);
+INSERT INTO "base_assumptions" VALUES(2,45,NULL,90,NULL,1,0.07,0.03);
+INSERT INTO "base_assumptions" VALUES(3,65,65,90,95,2,0.05,0.029);
+INSERT INTO "base_assumptions" VALUES(4,62,65,92,92,1,0.055,0.026);
+INSERT INTO "base_assumptions" VALUES(5,62,65,92,92,1,0.055,0.026);
+INSERT INTO "base_assumptions" VALUES(6,58,60,95,95,1,0.065,0.031);
+CREATE TABLE growth_rate_configurations (
+    growth_rate_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER,                               -- Optional: if configuring asset growth
+    retirement_income_plan_id INTEGER,              -- Optional: if configuring income growth
+    scenario_id INTEGER,                            -- Optional: if scenario-specific
+    configuration_type TEXT NOT NULL,               -- 'DEFAULT', 'OVERRIDE', or 'STEPWISE'
+    start_year INTEGER NOT NULL,                    -- Year-based: Market projections by year
+    end_year INTEGER,                               -- Year-based: Market projections by year
+    growth_rate REAL NOT NULL,                      -- Annual rate
+    FOREIGN KEY (asset_id)
+        REFERENCES assets (asset_id) ON DELETE CASCADE,
+    FOREIGN KEY (retirement_income_plan_id)
+        REFERENCES retirement_income_plans (income_plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (scenario_id)
+        REFERENCES scenarios (scenario_id) ON DELETE CASCADE
+);
+INSERT INTO "growth_rate_configurations" VALUES(1,2,NULL,NULL,'OVERRIDE',2024,NULL,0.07);
+INSERT INTO "growth_rate_configurations" VALUES(2,3,NULL,NULL,'OVERRIDE',2024,NULL,0.065);
+INSERT INTO "growth_rate_configurations" VALUES(3,4,NULL,NULL,'STEPWISE',2024,2026,0.08);
+INSERT INTO "growth_rate_configurations" VALUES(4,4,NULL,NULL,'STEPWISE',2027,2030,0.06);
+INSERT INTO "growth_rate_configurations" VALUES(5,5,NULL,NULL,'STEPWISE',2024,2025,0.15);
+INSERT INTO "growth_rate_configurations" VALUES(6,5,NULL,NULL,'STEPWISE',2026,2027,0.1);
+CREATE TABLE households (
+    household_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_name TEXT NOT NULL,
+    person1_first_name TEXT NOT NULL,
+    person1_last_name TEXT NOT NULL,
+    person1_dob DATE NOT NULL,                      -- Full date for precise calculations
+    person2_first_name TEXT,
+    person2_last_name TEXT,
+    person2_dob DATE,                               -- Full date for precise calculations
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO "households" VALUES(1,'Test Household A','John','Smith','1970-05-15','Jane','Smith','1972-08-23','2025-01-28 05:52:00','2025-01-28 05:52:00');
+INSERT INTO "households" VALUES(2,'Test Household B','Sarah','Johnson','1985-03-20',NULL,NULL,NULL,'2025-01-28 05:52:46','2025-01-28 05:52:46');
+INSERT INTO "households" VALUES(3,'Test Household C','Robert','Miller','1960-08-10','Emma','Miller','1980-12-15','2025-01-28 05:58:02','2025-01-28 05:58:02');
+INSERT INTO "households" VALUES(4,'Test Household D','Michael','Anderson','1965-11-22','Lisa','Anderson','1966-03-15','2025-01-28 06:13:37','2025-01-28 06:13:37');
+INSERT INTO "households" VALUES(5,'Test Household E','David','Wilson','1975-04-30','Maria','Wilson','1978-09-12','2025-01-28 06:14:35','2025-01-28 06:14:35');
+CREATE TABLE inflows_outflows (
+    inflow_outflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    type TEXT NOT NULL,                           -- 'inflow' or 'outflow'
+    name TEXT NOT NULL,
+    owner TEXT NOT NULL,                          -- 'person1', 'person2', or 'joint'
+    annual_amount REAL NOT NULL,
+    start_year INTEGER NOT NULL,                  -- Year-based: "Inheritance in 2025"
+    end_year INTEGER,                             -- Year-based: "Until 2030"
+    apply_inflation INTEGER DEFAULT 0,            -- Should amount inflate over time?
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "inflows_outflows" VALUES(1,1,'inflow','Salary Person 1','person1',120000.0,2024,2029,1);
+INSERT INTO "inflows_outflows" VALUES(2,1,'inflow','Salary Person 2','person2',95000.0,2024,2031,1);
+INSERT INTO "inflows_outflows" VALUES(3,1,'outflow','Property Tax','joint',8500.0,2024,NULL,1);
+INSERT INTO "inflows_outflows" VALUES(4,2,'inflow','Tech Job Salary','person1',180000.0,2024,2030,1);
+INSERT INTO "inflows_outflows" VALUES(5,2,'inflow','Rental Income','person1',36000.0,2024,NULL,1);
+INSERT INTO "inflows_outflows" VALUES(6,2,'inflow','Side Consulting','person1',25000.0,2024,2026,0);
+CREATE TABLE liabilities (
+    liability_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    liability_category_id INTEGER NOT NULL,
+    liability_name TEXT NOT NULL,
+    owner TEXT NOT NULL,                           -- 'person1', 'person2', or 'joint'
+    value REAL NOT NULL,                          -- Current value
+    interest_rate REAL,                           -- Annual interest rate
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE,
+    FOREIGN KEY (liability_category_id) REFERENCES liability_categories (liability_category_id) ON DELETE CASCADE
+);
+INSERT INTO "liabilities" VALUES(1,1,1,'Home Mortgage','joint',450000.0,0.0375,1);
+INSERT INTO "liabilities" VALUES(2,1,2,'Car Loan','person1',35000.0,0.0425,1);
+INSERT INTO "liabilities" VALUES(3,2,3,'Rental Property Mortgage','person1',300000.0,0.0425,1);
+INSERT INTO "liabilities" VALUES(4,2,4,'Investment Line of Credit','person1',50000.0,0.065,1);
+CREATE TABLE liability_categories (
+    liability_category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    category_name TEXT NOT NULL,
+    category_order INTEGER DEFAULT 0,               -- For UI ordering
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "liability_categories" VALUES(1,1,'Mortgages',1);
+INSERT INTO "liability_categories" VALUES(2,1,'Personal Loans',2);
+INSERT INTO "liability_categories" VALUES(3,2,'Investment Property Loans',1);
+INSERT INTO "liability_categories" VALUES(4,2,'Credit Lines',2);
+INSERT INTO "liability_categories" VALUES(5,6,'International Mortgages',1);
+INSERT INTO "liability_categories" VALUES(6,6,'Business Loans',2);
+CREATE TABLE plans (
+    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL,
+    plan_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, reference_person INTEGER NOT NULL DEFAULT 1, plan_creation_year INTEGER,
+    FOREIGN KEY (household_id) REFERENCES households (household_id) ON DELETE CASCADE
+);
+INSERT INTO "plans" VALUES(1,1,'Base Retirement Plan','2025-01-28 05:52:00','2025-01-28 05:52:00',1,NULL);
+INSERT INTO "plans" VALUES(2,2,'FIRE Strategy Plan','2025-01-28 05:52:46','2025-01-28 05:52:46',1,NULL);
+INSERT INTO "plans" VALUES(3,2,'FIRE Strategy Plan','2025-01-28 05:53:31','2025-01-28 05:53:31',1,NULL);
+INSERT INTO "plans" VALUES(4,3,'Staggered Retirement Plan','2025-01-28 05:58:02','2025-01-28 05:58:02',1,NULL);
+INSERT INTO "plans" VALUES(5,4,'Pension Optimization Plan','2025-01-28 06:13:37','2025-01-28 06:13:37',1,NULL);
+INSERT INTO "plans" VALUES(6,5,'International Retirement Plan','2025-01-28 06:14:35','2025-01-28 06:14:35',1,NULL);
+CREATE TABLE retirement_income_plans (
+    income_plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    owner TEXT NOT NULL,                          -- 'person1', 'person2', or 'joint'
+    annual_income REAL NOT NULL,
+    start_age INTEGER NOT NULL,                   -- Age-based: "Social Security at 67"
+    end_age INTEGER,                              -- Age-based: "Pension until 85"
+    include_in_nest_egg INTEGER DEFAULT 1,        -- Include in retirement calculations
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "retirement_income_plans" VALUES(1,1,'Social Security','person1',32000.0,67,NULL,1);
+INSERT INTO "retirement_income_plans" VALUES(2,1,'Pension','person2',45000.0,65,NULL,1);
+INSERT INTO "retirement_income_plans" VALUES(3,2,'Social Security','person1',28000.0,67,NULL,1);
+INSERT INTO "retirement_income_plans" VALUES(4,2,'Rental Income Stream','person1',36000.0,45,NULL,1);
+INSERT INTO "retirement_income_plans" VALUES(5,5,'Corporate Pension','person1',65000.0,62,NULL,1);
+INSERT INTO "retirement_income_plans" VALUES(6,5,'State Pension','person2',42000.0,65,NULL,1);
+CREATE TABLE scenario_assumptions (
+    scenario_id INTEGER PRIMARY KEY,
+    retirement_age_1 INTEGER,                       -- Age-based: Retirement planning is age-focused
+    retirement_age_2 INTEGER,                       -- Age-based: Retirement planning is age-focused
+    default_growth_rate REAL,                      -- Annual rate
+    inflation_rate REAL,                           -- Annual rate
+    annual_retirement_spending REAL,                -- Amount
+    FOREIGN KEY (scenario_id) REFERENCES scenarios (scenario_id) ON DELETE CASCADE
+);
+INSERT INTO "scenario_assumptions" VALUES(1,60,62,0.055,0.03,85000.0);
+INSERT INTO "scenario_assumptions" VALUES(2,67,69,0.045,0.025,75000.0);
+INSERT INTO "scenario_assumptions" VALUES(3,43,NULL,0.08,0.032,100000.0);
+INSERT INTO "scenario_assumptions" VALUES(4,47,NULL,0.05,0.028,80000.0);
+INSERT INTO "scenario_assumptions" VALUES(5,45,NULL,0.065,0.03,90000.0);
+CREATE TABLE scenario_overrides (
+    override_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario_id INTEGER NOT NULL,
+    asset_id INTEGER,                               -- Optional: if overriding an asset
+    liability_id INTEGER,                           -- Optional: if overriding a liability
+    inflow_outflow_id INTEGER,                      -- Optional: if overriding a cash flow
+    retirement_income_plan_id INTEGER,              -- Optional: if overriding retirement income
+    override_field TEXT NOT NULL,                   -- Field being overridden
+    override_value TEXT NOT NULL,                   -- New value (matches source table's format)
+    FOREIGN KEY (scenario_id) 
+        REFERENCES scenarios (scenario_id) ON DELETE CASCADE,
+    FOREIGN KEY (asset_id) 
+        REFERENCES assets (asset_id) ON DELETE CASCADE,
+    FOREIGN KEY (liability_id) 
+        REFERENCES liabilities (liability_id) ON DELETE CASCADE,
+    FOREIGN KEY (inflow_outflow_id) 
+        REFERENCES inflows_outflows (inflow_outflow_id) ON DELETE CASCADE,
+    FOREIGN KEY (retirement_income_plan_id)
+        REFERENCES retirement_income_plans (income_plan_id) ON DELETE CASCADE
+);
+INSERT INTO "scenario_overrides" VALUES(1,1,2,NULL,NULL,NULL,'value','600000');
+INSERT INTO "scenario_overrides" VALUES(2,2,4,NULL,NULL,NULL,'remove','TRUE');
+INSERT INTO "scenario_overrides" VALUES(3,3,5,NULL,NULL,NULL,'value','400000');
+INSERT INTO "scenario_overrides" VALUES(4,3,6,NULL,NULL,NULL,'remove','TRUE');
+INSERT INTO "scenario_overrides" VALUES(5,4,5,NULL,NULL,NULL,'value','200000');
+CREATE TABLE scenarios (
+    scenario_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    scenario_name TEXT NOT NULL,
+    scenario_color TEXT,                            -- For UI visualization
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON DELETE CASCADE
+);
+INSERT INTO "scenarios" VALUES(1,1,'Early Retirement','#FF5733','2025-01-28 05:52:00');
+INSERT INTO "scenarios" VALUES(2,1,'Conservative Growth','#33FF57','2025-01-28 05:52:00');
+INSERT INTO "scenarios" VALUES(3,2,'Ultra Aggressive','#FF0000','2025-01-28 05:52:46');
+INSERT INTO "scenarios" VALUES(4,2,'Market Correction','#0000FF','2025-01-28 05:52:46');
+INSERT INTO "scenarios" VALUES(5,2,'Balanced Approach','#00FF00','2025-01-28 05:52:46');
+INSERT INTO "scenarios" VALUES(6,5,'Early Pension Take','#4B0082','2025-01-28 06:13:37');
+INSERT INTO "scenarios" VALUES(7,5,'Delayed Social Security','#800000','2025-01-28 06:13:37');
+INSERT INTO "scenarios" VALUES(8,5,'Hybrid Approach','#006400','2025-01-28 06:13:37');
+CREATE INDEX idx_households_name ON households (household_name);
+CREATE INDEX idx_plans_household_id ON plans (household_id);
+CREATE INDEX idx_scenarios_plan_id ON scenarios (plan_id);
+CREATE INDEX idx_scenario_overrides_scenario_id ON scenario_overrides (scenario_id);
+CREATE INDEX idx_scenario_overrides_asset_id ON scenario_overrides (asset_id);
+CREATE INDEX idx_scenario_overrides_liability_id ON scenario_overrides (liability_id);
+CREATE INDEX idx_scenario_overrides_inflow_outflow_id ON scenario_overrides (inflow_outflow_id);
+CREATE INDEX idx_scenario_overrides_rip_id ON scenario_overrides (retirement_income_plan_id);
+CREATE INDEX idx_asset_categories_plan_id ON asset_categories (plan_id);
+CREATE INDEX idx_assets_plan_id ON assets (plan_id);
+CREATE INDEX idx_assets_category_id ON assets (asset_category_id);
+CREATE INDEX idx_liability_categories_plan_id ON liability_categories (plan_id);
+CREATE INDEX idx_liabilities_plan_id ON liabilities (plan_id);
+CREATE INDEX idx_liabilities_category_id ON liabilities (liability_category_id);
+CREATE INDEX idx_inflows_outflows_plan_id ON inflows_outflows (plan_id);
+CREATE INDEX idx_inflows_outflows_type ON inflows_outflows (type);
+CREATE INDEX idx_inflows_outflows_years ON inflows_outflows (start_year, end_year);
+CREATE INDEX idx_retirement_income_plans_plan_id ON retirement_income_plans (plan_id);
+CREATE INDEX idx_growth_rate_configurations_asset_id ON growth_rate_configurations (asset_id);
+CREATE INDEX idx_growth_rate_configurations_rip_id ON growth_rate_configurations (retirement_income_plan_id);
+CREATE INDEX idx_growth_rate_configurations_scenario_id ON growth_rate_configurations (scenario_id);
+CREATE INDEX idx_growth_rate_configurations_years ON growth_rate_configurations (start_year, end_year);
+DELETE FROM "sqlite_sequence";
+INSERT INTO "sqlite_sequence" VALUES('households',5);
+INSERT INTO "sqlite_sequence" VALUES('plans',6);
+INSERT INTO "sqlite_sequence" VALUES('scenarios',8);
+INSERT INTO "sqlite_sequence" VALUES('asset_categories',10);
+INSERT INTO "sqlite_sequence" VALUES('inflows_outflows',6);
+INSERT INTO "sqlite_sequence" VALUES('retirement_income_plans',6);
+INSERT INTO "sqlite_sequence" VALUES('assets',7);
+INSERT INTO "sqlite_sequence" VALUES('liability_categories',6);
+INSERT INTO "sqlite_sequence" VALUES('liabilities',4);
+INSERT INTO "sqlite_sequence" VALUES('growth_rate_configurations',6);
+INSERT INTO "sqlite_sequence" VALUES('scenario_overrides',5);
+COMMIT;
+```
+
+######## docs/FIPLI_FILE_HIERARCHY.md ########
+```
+fiply2/
+backend/
+    main.py
+    requirements.txt
+    database_operations/
+        connection.py
+        models.py
+        schema.sql
+        __init__.py
+        calculations/
+            scenario_calcs.py
+            __init__.py
+            base_facts/
+                assets_calcs.py
+                base_facts_calcs.py
+                cash_flows_calcs.py
+                growth_handler_calcs.py
+                liabilities_calcs.py
+                retirement_income_calcs.py
+                __init__.py
+                base_facts_utils/
+            scenario/
+                scenario_utils/
+        crud/
+            base_assumptions_crud.py
+            households_crud.py
+            plans_crud.py
+            scenarios_crud.py
+            __init__.py
+            financial/
+                assets_crud.py
+                cash_flows_crud.py
+                growth_rates_crud.py
+                liabilities_crud.py
+                retirement_income_crud.py
+                __init__.py
+        database/
+            fiply2_database.db
+            schema.sql
+        tests/
+            conftest.py
+            test_crud_operations.py
+            test_growth_calculations.py
+            test_growth_configurations.py
+            test_retirement_calculations.py
+            test_scenario_calculations.py
+            test_scenario_creation.py
+            test_timeline_validations.py
+            test_time_handeling.py
+            __init__.py
+            database_tests/
+            fixtures/
+            util_tests/
+        utils/
+            money_utils.py
+            time_utils.py
+            __init__.py
+        validation/
+            growth_validation.py
+            money_validation.py
+            scenario_timeline_validation.py
+            time_validation.py
+IGNORE/
+    compile.py
+    hierarchy.py
+    schema.py
+    stripcomments.py
+    IGNORE/
+        txt_files/
+            backend_combined.txt
+            docs_combined.txt
+            tests_combined.txt
+    txt_files/
+```
+
+######## docs/FIPLI_PROJECT_OVERVIEW.md ########
+```
+# FIPLI_PROJECT_OVERVIEW.md
+# This document is a high-level overview of the FIPLI project
+################ FIPLI: System Overview & Core Modeling #################
+# Core Purpose & High-Level Overview
+Fipli is a streamlined financial planning projection system implementing deterministic linear modeling. Conceptually, it's similar to eMoney or MoneyGuidePro, but with an intentionally simplified computational model. While the original prototype was built in Excel, the current implementation uses Python for computational logic and SQL for data persistence, though the core algorithms could be implemented in either environment. Fipli is optimized for scenario analysis and comparative projection modeling rather than granular financial planning - we explicitly exclude tax implications, withdrawal sequencing, and other complexities typically found in comprehensive financial planning tools.
+# The Fundamental Visualization
+The core visualization model is a line graph where the Y-axis represents portfolio value in dollars and the X-axis tracks time progression in years. The X-axis is structured around absolute years (e.g., 2025, 2026, 2027) rather than relative age. However, since age is directly tied to the selected start year and date of birth, projections maintain full compatibility with both age-based and year-based perspectives. The tick marks represent annual periods, initiating from the year the plan was created, ensuring a fixed and consistent starting point for projections. The fundamental design principle is strict adherence to annual-period linear projections - we explicitly avoid any intra-year calculations or display granularity. The line itself represents the projected retirement portfolio value - specifically the retirement nest egg, not total net worth.
+# Data Model Foundation
+The composition of this nest egg is determined through a structured set of user-defined inputs. These inputs encompass several core data entities: assets, liabilities, scheduled inflows, scheduled outflows, and retirement income streams. Each of these entities can be organized into user-defined classification buckets - for instance, assets might be categorized as qualified or non-qualified, while liabilities might be grouped into personal or business categories. The system is governed by a set of base parameters called base facts, which include the default growth rate, inflation rate, and time period boundaries (start, retirement, and end points expressed in absolute years). It's important to note that retirement spending, while central to the analysis, is intentionally excluded from these base facts.
+# Growth Rate System
+The growth rate system in Fipli is particularly sophisticated. The base facts establish a default growth rate, but individual assets can override this in several ways. An asset can have a simple growth rate override - useful for assigning different returns to different investment types, like setting a higher growth rate for an aggressive equity portfolio. For more complex projections, assets can use stepwise growth rate overrides, where different rates apply during different time periods. When using stepwise overrides, any time periods not explicitly covered default back to the scenario's (or base facts') default growth rate. Liabilities follow a different model - they don't participate in the default growth rate system at all, instead having an optional interest rate parameter that, if specified, determines liability growth. Inflation adjustments can be toggled for various inputs, including scheduled inflows, scheduled outflows, and retirement income streams. When enabled, these values are adjusted before they are applied in the annual calculations. When enabled, these values are automatically adjusted using the inflation rate specified in either the base facts or scenario assumptions.
+# Scenario System
+Each scenario begins as a clone of the base facts, creating a sandbox for "what-if" analysis. While scenarios inherit all base fact parameters, they can independently override any of these values. What makes scenarios particularly powerful is their unique retirement spending parameter - an inflation-adjusted annual outflow that begins at retirement and continues through the final projection year. To clarify the distinction between scheduled flows and retirement spending: the scheduled inflows and outflows in the base facts are meant for modeling discrete events like education expenses or inheritance receipts. This allows users to quickly test different spending levels against their base assumptions. Often, users will use scenarios to solve for maximum sustainable spending - essentially finding the spending level that depletes the portfolio exactly at the final projection year - but the tool supports any arbitrary spending pattern.
+# Business Logic & Calculations
+The business logic enforces consistent date handling throughout the system. We follow a "enter what you know, calculate what you need" principle. Users enter their date of birth, and the system derives their current age dynamically. However, all projections and calculations are stored in absolute years to maintain a unified and consistent timeline. The system ensures full interchangeability between age and year for all inputs, calculations, and visualizations. Users can input values using either format, and the system dynamically converts between them as needed. Scheduled inflows and outflows are expressed in years, while retirement income streams default to age-based inputs, as retirement benefits typically trigger at specific ages. All calculations happen dynamically, with the system aggregating assets, applying growth rates, processing scheduled flows, and computing portfolio values in a way that maintains consistency with standard financial planning practices while keeping the computational model straightforward and deterministic.​​​​​​​​​​​​​​​​
+```
+
